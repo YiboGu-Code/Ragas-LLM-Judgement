@@ -173,6 +173,10 @@
   - 先写失败测试 `tests/test_sut_http_adapter.py`，观察到 `ModuleNotFoundError: app.sut`（红灯）。
   - 添加 `app/sut/http_adapter.py` 并让测试通过（绿灯）。
   - 当前实现提交：4e5cfdb。
+- Task 8（进程内异步 RunEngine）：
+  - 先写失败测试 `tests/test_execution_engine.py`，观察到 `ModuleNotFoundError: app.execution`（红灯）。
+  - 添加 `app/execution/engine.py` 并让测试通过（绿灯），包含并发控制与超时失败标记。
+  - 当前实现提交：5ae7a9b。
 
 ## 8. 结论与下一步
 
