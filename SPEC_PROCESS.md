@@ -177,6 +177,10 @@
   - 先写失败测试 `tests/test_execution_engine.py`，观察到 `ModuleNotFoundError: app.execution`（红灯）。
   - 添加 `app/execution/engine.py` 并让测试通过（绿灯），包含并发控制与超时失败标记。
   - 当前实现提交：5ae7a9b。
+- Task 9（基础指标与严格 skipped 规则）：
+  - 先写失败测试 `tests/test_metric_requirements.py`，观察到 `ModuleNotFoundError: app.metrics`（红灯）。
+  - 添加 `app/metrics/basic.py`，实现 `rag_contexts_present`：缺失 `trace.retrieval.contexts` 时严格 `skipped`（绿灯）。
+  - 当前实现提交：a8411cf。
 
 ## 8. 结论与下一步
 
