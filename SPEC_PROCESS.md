@@ -165,6 +165,10 @@
   - 先写失败测试 `tests/test_healthz.py`，观察到 `ModuleNotFoundError: app.main`（红灯）。
   - 添加 `app/main.py` 并让测试通过（绿灯）。
   - 当前实现提交：9b7a8f0。
+- Task 6（Dataset 上传/查询 API）：
+  - 先写失败测试 `tests/test_datasets_api.py`，观察到 `ImportError: cannot import name 'create_app'`（红灯）。
+  - 引入 `create_app()` 工厂（支持按环境变量创建独立 app/DB），并实现 `/datasets` 上传与 schema 错误返回 422（绿灯）。
+  - 当前实现提交：b9050a2。
 
 ## 8. 结论与下一步
 
