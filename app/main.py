@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from app.core.config import Settings
 from app.db.migrate import create_all
 from app.db.session import create_engine_and_sessionmaker
+from app.plugins.registry import PluginRegistry
 
 
 def create_app() -> FastAPI:
@@ -22,14 +23,26 @@ def create_app() -> FastAPI:
     app = FastAPI(title="LLM Eval Backend", version="0.1.0")
     app.state.settings = settings
     app.state.SessionLocal = SessionLocal
+    app.state.registry = PluginRegistry()
+
+    from app.metrics.basic import RagContextsPresentMetric
+    from app.metrics.ragas_metrics import RagasAnswerRelevancyMetric, RagasFaithfulnessMetric
+    from app.sut.http_adapter import HttpSUTAdapter
+
+    app.state.registry.register_metric(RagContextsPresentMetric)
+    app.state.registry.register_metric(RagasFaithfulnessMetric)
+    app.state.registry.register_metric(RagasAnswerRelevancyMetric)
+    app.state.registry.register_sut_adapter(HttpSUTAdapter)
 
     @app.get("/healthz")
     def healthz():
         return {"status": "ok"}
 
     from app.api.datasets import router as datasets_router
+    from app.api.runs import router as runs_router
 
     app.include_router(datasets_router)
+    app.include_router(runs_router)
 
     return app
 
