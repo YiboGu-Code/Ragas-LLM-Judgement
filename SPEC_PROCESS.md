@@ -189,6 +189,10 @@
   - 先写失败测试 `tests/test_runs_api.py`，观察到 `AttributeError: 'State' object has no attribute 'registry'`（红灯）。
   - 在 `app/main.py` 初始化 `PluginRegistry` 并注册内置 adapter/metric；添加 `app/api/runs.py` 与 `app/schemas/runs.py`，实现 Run 的创建、后台启动、查询与 items 获取、取消（绿灯）。
   - 当前实现提交：c88f014。
+- Task 12（导出 API：jsonl/csv/json）：
+  - 扩展测试 `tests/test_runs_api.py`，观察到 `GET /runs/{run_id}/export` 返回 404（红灯）。
+  - 在 `app/api/runs.py` 添加导出端点，支持 jsonl/csv/json 三种格式，并保持字段稳定（绿灯）。
+  - 当前实现提交：a36621f。
 
 ## 8. 结论与下一步
 
