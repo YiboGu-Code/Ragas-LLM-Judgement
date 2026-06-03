@@ -61,9 +61,23 @@ def test_create_and_run(tmp_path, monkeypatch):
         if status in ("succeeded", "failed"):
             break
         time.sleep(0.01)
+    assert status == "succeeded"
 
     items_resp = client.get(f"/runs/{run_id}/items")
     assert items_resp.status_code == 200, items_resp.text
     items = items_resp.json()["items"]
     assert len(items) == 1
     assert items[0]["record_id"]
+
+    jsonl_resp = client.get(f"/runs/{run_id}/export", params={"format": "jsonl"})
+    assert jsonl_resp.status_code == 200
+    assert jsonl_resp.text.strip().startswith("{")
+
+    csv_resp = client.get(f"/runs/{run_id}/export", params={"format": "csv"})
+    assert csv_resp.status_code == 200
+    assert "record_id" in csv_resp.text.splitlines()[0]
+
+    json_resp = client.get(f"/runs/{run_id}/export", params={"format": "json"})
+    assert json_resp.status_code == 200
+    body = json_resp.json()
+    assert body["run"]["run_id"] == run_id

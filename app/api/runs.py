@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import json
 import threading
 import uuid
@@ -8,7 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.datasets.validator import validate_jsonl_lines
 from app.db.models import Dataset, Run, RunItem
@@ -231,6 +234,81 @@ def get_run_items(request: Request, run_id: str):
                 }
             )
         return RunItemsResponse(items=out)
+
+
+@router.get("/runs/{run_id}/export")
+def export_run(request: Request, run_id: str, format: str = Query(..., pattern="^(jsonl|csv|json)$")):
+    SessionLocal = request.app.state.SessionLocal
+    with SessionLocal() as session:
+        run = session.get(Run, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        items = (
+            session.query(RunItem)
+            .filter(RunItem.run_id == run_id)
+            .order_by(RunItem.id.asc())
+            .all()
+        )
+
+        normalized_items: list[dict[str, Any]] = []
+        metric_names: set[str] = set()
+        for it in items:
+            metrics = (it.metrics_json or {}).get("metrics", [])
+            for m in metrics:
+                if isinstance(m, dict) and "name" in m:
+                    metric_names.add(str(m["name"]))
+            normalized_items.append(
+                {
+                    "record_id": it.record_id,
+                    "status": it.status,
+                    "error": it.error_json,
+                    "output": it.output_json,
+                    "metrics": metrics,
+                    "duration_ms": it.duration_ms,
+                }
+            )
+
+        run_obj = {
+            "run_id": run.id,
+            "dataset_id": run.dataset_id,
+            "eval_type": run.eval_type,
+            "status": run.status,
+            "progress": {"total": run.progress_total, "completed": run.progress_completed, "failed": run.progress_failed},
+        }
+
+        if format == "json":
+            return JSONResponse({"run": run_obj, "items": normalized_items})
+
+        if format == "jsonl":
+            lines = [json.dumps(item, ensure_ascii=False) for item in normalized_items]
+            return PlainTextResponse("\n".join(lines) + ("\n" if lines else ""), media_type="application/jsonl")
+
+        output = io.StringIO()
+        fieldnames = ["record_id", "status", "duration_ms", "error_type", "error_message"]
+        for name in sorted(metric_names):
+            fieldnames.append(f"metric.{name}.status")
+            fieldnames.append(f"metric.{name}.score")
+
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for item in normalized_items:
+            row: dict[str, Any] = {
+                "record_id": item["record_id"],
+                "status": item["status"],
+                "duration_ms": item["duration_ms"],
+                "error_type": (item["error"] or {}).get("type") if isinstance(item.get("error"), dict) else None,
+                "error_message": (item["error"] or {}).get("message") if isinstance(item.get("error"), dict) else None,
+            }
+            metric_map = {m.get("name"): m for m in item.get("metrics", []) if isinstance(m, dict) and m.get("name")}
+            for name in sorted(metric_names):
+                m = metric_map.get(name) or {}
+                row[f"metric.{name}.status"] = m.get("status")
+                row[f"metric.{name}.score"] = m.get("score")
+            writer.writerow(row)
+
+        return PlainTextResponse(output.getvalue(), media_type="text/csv")
+
 
 
 @router.post("/runs/{run_id}/cancel", response_model=RunGetResponse)
