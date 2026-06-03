@@ -157,6 +157,10 @@
   - 先写失败测试 `tests/test_dataset_validation.py`，观察到 `ModuleNotFoundError: app.datasets`（红灯）。
   - 添加 `app/datasets/records.py` 与 `app/datasets/validator.py` 并让测试通过（绿灯）。
   - 当前实现提交：71d88d5。
+- Task 4（SQLite 持久化模型）：
+  - 先写失败测试 `tests/test_db_models.py`，观察到 `ModuleNotFoundError: app.db`（红灯）。
+  - 添加 `app/db/*` 并让测试通过（绿灯），同时修复 Python 3.12 的 `datetime.utcnow` 弃用告警。
+  - 当前实现提交：39df4a2。
 
 ## 8. 结论与下一步
 
