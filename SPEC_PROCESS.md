@@ -124,9 +124,9 @@
 
 按照课程要求，本项目在正式进入实现前，需要使用“与主开发智能体不同”的 agent，仅凭 `SPEC.md` + `PLAN.md` 冷启动试跑 1–2 个任务，并把证据记录在此处。
 
-**当前状态：未执行。**
+**当前状态：未执行（仍待完成）。**
 
-原因：截至目前仅完成了 SPEC 与 PLAN 的生成与审查确认；尚未进入实现阶段，因此没有产生“陌生 agent”在实现中停下来提问的客观证据与 diff。
+原因：虽然已进入实现阶段并完成了部分任务，但尚未按要求使用“不同于主开发智能体”的第二个 agent 进行冷启动试跑，因此本节先保留为空并明确标注待补充。
 
 **计划的冷启动试跑方式（执行时将补充证据）：**
 
@@ -143,7 +143,22 @@
 - 它产出的代码与测试与预期的差距分析
 - 基于该反馈对 SPEC/PLAN 做出的修订，并给出关键 diff 片段
 
-## 7. 结论与下一步
+## 7. 实现阶段过程补充（简要，便于追溯）
+
+为保证过程证据可追溯，在开始执行 PLAN 后补充关键实施节点（不替代 `AGENT_LOG.md`）：
+
+- Git 初始化：仓库最初不是 git repository，因此先执行 `git init` 并提交了 SPEC/PLAN/SPEC_PROCESS 与 Python 骨架（commit：e871524）。
+- Worktree：按课程建议创建 `.worktrees/feat-backend-mvp`，在分支 `feat/backend-mvp` 上开发，避免污染默认分支。
+- Task 2（插件接口与 registry）：
+  - 先写失败测试 `tests/test_plugin_registry.py`，观察到 `ModuleNotFoundError: app.plugins`（红灯）。
+  - 添加 `app/plugins/interfaces.py`、`app/plugins/registry.py` 并让测试通过（绿灯）。
+  - 当前实现提交：857a961。
+- Task 3（数据集 schema 校验）：
+  - 先写失败测试 `tests/test_dataset_validation.py`，观察到 `ModuleNotFoundError: app.datasets`（红灯）。
+  - 添加 `app/datasets/records.py` 与 `app/datasets/validator.py` 并让测试通过（绿灯）。
+  - 当前实现提交：71d88d5。
+
+## 8. 结论与下一步
 
 - 你已审查并确认当前 [SPEC.md](file:///e:/Homework/SEEC3/RagasTest/SPEC.md) 与 [PLAN.md](file:///e:/Homework/SEEC3/RagasTest/PLAN.md) 可进入实现阶段。
 - 下一步将采用“子代理驱动（subagent-driven-development）”执行 PLAN 中的任务，并在实现过程中持续更新 PLAN 勾选与 commit hash，同时记录 `AGENT_LOG.md`。
