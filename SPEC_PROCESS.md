@@ -185,6 +185,10 @@
   - 先写失败测试 `tests/test_ragas_metrics_skipped.py`，观察到 `ModuleNotFoundError: app.metrics.ragas_metrics`（红灯）。
   - 添加 `app/metrics/ragas_metrics.py`，实现 `RagasFaithfulnessMetric` / `RagasAnswerRelevancyMetric` 的 requirements 检查，不满足条件时严格 `skipped`（绿灯）。
   - 当前实现提交：94b30c7。
+- Task 11（Run 生命周期 API：创建/启动/查询/items/取消）：
+  - 先写失败测试 `tests/test_runs_api.py`，观察到 `AttributeError: 'State' object has no attribute 'registry'`（红灯）。
+  - 在 `app/main.py` 初始化 `PluginRegistry` 并注册内置 adapter/metric；添加 `app/api/runs.py` 与 `app/schemas/runs.py`，实现 Run 的创建、后台启动、查询与 items 获取、取消（绿灯）。
+  - 当前实现提交：c88f014。
 
 ## 8. 结论与下一步
 
