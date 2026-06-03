@@ -10,6 +10,24 @@
 
 ---
 
+## 进度（持续更新）
+
+- [x] 任务 1：初始化仓库与 Python 依赖（commit: e871524）
+- [x] 任务 2：插件接口与 registry（commit: 857a961）
+- [x] 任务 3：四类评测 Dataset JSONL schema 与校验（commit: 71d88d5）
+- [x] 任务 4：SQLite ORM 数据模型与 create_all（commit: 39df4a2）
+- [x] 任务 5：FastAPI app + /healthz（commit: 9b7a8f0）
+- [x] 任务 6：Dataset 上传/查询 API（commit: b9050a2）
+- [x] 任务 7：HTTP SUTAdapter（commit: 4e5cfdb）
+- [x] 任务 8：进程内异步 RunEngine（commit: 5ae7a9b）
+- [x] 任务 9：基础指标与严格 skipped 规则（commit: a8411cf）
+- [x] 任务 10：Ragas 指标封装（requirements + skipped）（commit: 94b30c7）
+- [x] 任务 11：Run 生命周期 API（commit: c88f014）
+- [ ] 任务 12：导出 API（jsonl/csv/json）
+- [ ] 任务 13：脱敏与 artifacts 开关
+- [ ] 任务 14：Dockerfile + GitHub Actions CI
+- [ ] 任务 15：最终验证 + push GitHub
+
 ## 0. 预期目录结构（实现后）
 
 - `app/main.py`：FastAPI 应用入口，路由注册
