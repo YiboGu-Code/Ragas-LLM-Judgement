@@ -181,6 +181,10 @@
   - 先写失败测试 `tests/test_metric_requirements.py`，观察到 `ModuleNotFoundError: app.metrics`（红灯）。
   - 添加 `app/metrics/basic.py`，实现 `rag_contexts_present`：缺失 `trace.retrieval.contexts` 时严格 `skipped`（绿灯）。
   - 当前实现提交：a8411cf。
+- Task 10（Ragas 指标封装：requirements + skipped）：
+  - 先写失败测试 `tests/test_ragas_metrics_skipped.py`，观察到 `ModuleNotFoundError: app.metrics.ragas_metrics`（红灯）。
+  - 添加 `app/metrics/ragas_metrics.py`，实现 `RagasFaithfulnessMetric` / `RagasAnswerRelevancyMetric` 的 requirements 检查，不满足条件时严格 `skipped`（绿灯）。
+  - 当前实现提交：94b30c7。
 
 ## 8. 结论与下一步
 
