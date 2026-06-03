@@ -1,0 +1,149 @@
+# SPEC_PROCESS：与 Superpowers 协作生成 SPEC 与 PLAN 的过程记录
+
+本文档用于记录：从最初需求到 [SPEC.md](file:///e:/Homework/SEEC3/RagasTest/SPEC.md) 与 [PLAN.md](file:///e:/Homework/SEEC3/RagasTest/PLAN.md) 的产出过程中，Superpowers 工作流（brainstorming → writing-plans）的关键对话节点、迭代与决策证据。
+
+## 1. 背景与初始需求
+
+**用户目标：**
+
+- 基于 Ragas 搭建一个 LLM 测评平台（仅后端，不需要前端）
+- 评测覆盖四类：Prompt、RAG、AI Workflow、AI Agent
+- 强约束评测：输入规范、评测方式、结果输出，且必须保证通用性
+- 使用 Superpowers 流程一步一步来
+
+**早期约束与关键偏好（由用户明确给出/确认）：**
+
+- 模型使用要抽象出一个接口，用户自行对接具体模型与网关
+- 评测用例主要通过数据集文件提供（JSONL）
+- 默认持久化存储用 SQLite
+- 评测执行方式采用进程内异步（非外部队列）
+
+## 2. Brainstorming 关键节点（追问与澄清）
+
+在进入书面 SPEC 之前，重点通过“关键约束”来锁定通用平台边界，避免后续实现跑偏：
+
+### 2.1 关键追问 1：模型/Embedding 的接入方式
+
+目的：Ragas 通常需要 LLM-as-judge 与/或 embedding 能力，不同接入方式会决定平台的可移植性与抽象边界。
+
+对话节选（压缩复述）：
+
+> 我：评测执行时，平台调用被测 LLM/Embedding 的方式优先支持哪一种？（OpenAI 兼容 / Ollama / 单一云厂商 / 先做抽象层）  
+> 你：先做抽象层。模型的使用抽象出一个接口，然后我自己来手动对接实现需要使用哪个模型。
+
+决策：在 SPEC 中明确 ModelProvider 接口（chat/embed），平台核心不依赖任何厂商 SDK；provider_ref 仅保存与透传，且不得回显敏感字段。
+
+### 2.2 关键追问 2：评测输入数据的供给方式
+
+目的：评测的可复用性与可追溯性很大程度由 Dataset 机制决定；内联样本与外部数据拉取会显著影响范围与复杂度。
+
+对话节选（压缩复述）：
+
+> 我：评测用例希望主要通过哪种方式提供？（数据集文件 / 请求内联 / 二者都要 / 从外部拉取）  
+> 你：数据集文件。
+
+决策：以 JSONL 数据集上传作为主路径，并在 SPEC 中强制 schema 校验、记录行号错误；Run 引用 dataset_id 复用数据集。
+
+### 2.3 关键追问 3：默认数据库与落盘策略
+
+目的：是否“零配置可运行”直接决定工具可用性；同时需要兼顾后续可迁移到 Postgres 的可能。
+
+对话节选（压缩复述）：
+
+> 我：默认持久化存储用哪种数据库？（SQLite / Postgres / 仅文件 / 不落盘）  
+> 你：SQLite 默认。
+
+决策：SPEC 与 PLAN 都以 SQLite 为默认；同时在数据模型层保持清晰边界，未来可替换为 Postgres 而不影响业务逻辑。
+
+### 2.4 关键追问 4：Run 执行方式（同步 vs 异步）
+
+目的：评测任务通常耗时，平台必须支持查询进度与失败原因；但用户不希望引入 Redis 等外部依赖。
+
+对话节选（压缩复述）：
+
+> 我：评测任务执行方式默认是哪种？（异步队列 / 进程内异步 / 同步 / 仅生成任务配置）  
+> 你：进程内异步。
+
+决策：采用进程内异步执行引擎（并发控制、超时、取消、状态查询），并将分布式队列明确为非目标。
+
+## 3. 关键迭代（至少 3 轮）与处理决策
+
+### 迭代 1：从“要做测评平台”收敛到“通用抽象边界”
+
+输入：你提出“基于 Ragas 搭建测评平台，覆盖四类评测，强约束输入输出，保证通用性”。  
+处理：优先澄清“模型接入”与“被测系统接入”的抽象方式，避免平台被某个模型 SDK 或业务代码锁死。  
+产出决策：三类可插拔接口成为架构主线：
+
+- ModelProvider：你自行对接具体模型与 embedding
+- SUTAdapter：把 Prompt/RAG/Workflow/Agent 的执行统一输出为 Trace
+- Metric：把评分统一成 `MetricResult`，并显式 requirements 与 skipped 规则
+
+### 迭代 2：从“评测四类形态”收敛到“统一的 Dataset/Trace 规约”
+
+输入：四类评测天然需要不同中间产物（RAG contexts、workflow steps、agent tool calls）。  
+处理：在 SPEC 中强制每类 record 的 input schema 与 trace 必需字段，避免实现阶段由 adapter“自由发挥”导致指标不可计算。  
+产出决策：在 SPEC 中明确：
+
+- RAG：必须由 trace 产出 `retrieval.contexts`，否则依赖 contexts 的指标必须 skipped
+- Workflow：trace 必须有 steps（输入/输出/耗时/状态）
+- Agent：trace 必须有 messages，tool_calls 可选但结构固定
+
+### 迭代 3：从“平台能力列表”收敛到“可执行的 Run 生命周期”
+
+输入：用户要求可通用评测与结果输出，且无需前端。  
+处理：把能力落实为 API 闭环：Dataset 上传 → Run 创建/启动 → 查询 items → 导出，形成最小可用平台。  
+产出决策：在 SPEC 中定义稳定错误返回结构（error.code/message/details）与导出格式（JSONL/CSV/JSON），在 PLAN 中按 TDD 拆解到每个 endpoint 的测试用例与实现步骤。
+
+## 4. 采纳与推翻：哪些建议来自 AI，哪些被修正
+
+### 4.1 采纳的建议（AI 提出 → 你采纳）
+
+- **FastAPI 单体 + 插件化执行/评测（推荐方案）**：作为“零配置可运行 + 可扩展”的平衡点被采纳。
+- **以 Dataset(JSONL) 为中心的评测复用机制**：满足通用性与可追溯性。
+- **严格 skipped 规则**：缺字段不猜测补全，明确标记 skipped 并解释原因，避免误导性分数。
+- **provider_ref 不回显敏感信息**：安全性需求被写入 SPEC，并在 PLAN 中规划为可测试的脱敏模块。
+
+### 4.2 未采纳/延后（AI 提出 → 你未采纳或延后）
+
+- **外部队列（Redis/Celery/RQ）**：为减少依赖与符合“进程内异步”偏好，明确为非目标。
+- **从外部 URL/S3/Git 自动拉取数据集**：为控制范围与复杂度，作为非目标或未来扩展点。
+
+## 5. 对 brainstorming 技能的反思
+
+### 5.1 做得好的地方
+
+- 先锁定关键不可逆决策（模型接入方式、数据输入方式、存储与执行方式），能显著降低后续实现返工风险。
+- 将“通用性”落到可操作的约束：接口抽象 + schema + trace + skipped 规则，避免泛泛而谈。
+
+### 5.2 不足与改进空间
+
+- 对 Ragas 指标的“最小可用集合”与其对 chat/embed 的依赖细节，还可以在 brainstorming 阶段更早明确（例如首期必须支持哪些 ragas 指标、哪些属于可选）。
+- 对 artifacts 的保存策略与合规策略，可以进一步追问（例如默认脱敏规则、哪些字段绝不落盘）。
+
+## 6. 冷启动验证试跑（不同智能体）
+
+按照课程要求，本项目在正式进入实现前，需要使用“与主开发智能体不同”的 agent，仅凭 `SPEC.md` + `PLAN.md` 冷启动试跑 1–2 个任务，并把证据记录在此处。
+
+**当前状态：未执行。**
+
+原因：截至目前仅完成了 SPEC 与 PLAN 的生成与审查确认；尚未进入实现阶段，因此没有产生“陌生 agent”在实现中停下来提问的客观证据与 diff。
+
+**计划的冷启动试跑方式（执行时将补充证据）：**
+
+- 提供给第二个 agent 的输入：仅 [SPEC.md](file:///e:/Homework/SEEC3/RagasTest/SPEC.md) + [PLAN.md](file:///e:/Homework/SEEC3/RagasTest/PLAN.md)
+- 选择试跑任务（建议 1–2 个）：
+  - 任务 2：插件接口与 registry（能暴露接口/命名一致性问题）
+  - 任务 3：数据集 schema 校验（能暴露输入约束是否足够清晰）
+- 要求第二个 agent 的行为：遇到不确定处停下来提问，不允许自行猜测继续
+
+**执行完成后，本节将补充以下内容：**
+
+- 第二个 agent 提出的关键问题与其暴露的 SPEC/PLAN 缺陷
+- 它对需求的误读点与原因归因（spec 写错/不够清晰 vs agent 误读）
+- 它产出的代码与测试与预期的差距分析
+- 基于该反馈对 SPEC/PLAN 做出的修订，并给出关键 diff 片段
+
+## 7. 结论与下一步
+
+- 你已审查并确认当前 [SPEC.md](file:///e:/Homework/SEEC3/RagasTest/SPEC.md) 与 [PLAN.md](file:///e:/Homework/SEEC3/RagasTest/PLAN.md) 可进入实现阶段。
+- 下一步将采用“子代理驱动（subagent-driven-development）”执行 PLAN 中的任务，并在实现过程中持续更新 PLAN 勾选与 commit hash，同时记录 `AGENT_LOG.md`。
