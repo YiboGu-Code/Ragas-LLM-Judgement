@@ -161,6 +161,10 @@
   - 先写失败测试 `tests/test_db_models.py`，观察到 `ModuleNotFoundError: app.db`（红灯）。
   - 添加 `app/db/*` 并让测试通过（绿灯），同时修复 Python 3.12 的 `datetime.utcnow` 弃用告警。
   - 当前实现提交：39df4a2。
+- Task 5（FastAPI 入口与 healthz）：
+  - 先写失败测试 `tests/test_healthz.py`，观察到 `ModuleNotFoundError: app.main`（红灯）。
+  - 添加 `app/main.py` 并让测试通过（绿灯）。
+  - 当前实现提交：9b7a8f0。
 
 ## 8. 结论与下一步
 
