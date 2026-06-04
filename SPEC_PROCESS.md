@@ -193,6 +193,10 @@
   - 扩展测试 `tests/test_runs_api.py`，观察到 `GET /runs/{run_id}/export` 返回 404（红灯）。
   - 在 `app/api/runs.py` 添加导出端点，支持 jsonl/csv/json 三种格式，并保持字段稳定（绿灯）。
   - 当前实现提交：a36621f。
+- Task 13（脱敏与 artifacts 开关）：
+  - 先写失败测试 `tests/test_artifacts_redaction.py`，覆盖 `save_artifacts=true/false` 与脱敏规则；初始实现未落盘、无 trace_ref（红灯）。
+  - 添加 `app/artifacts/redaction.py` 与 `app/artifacts/store.py`，并在 Run 执行落库时按开关写入 artifacts、记录 `trace_ref`，对敏感字符串做默认脱敏（绿灯）。
+  - 当前实现提交：3b291dd。
 
 ## 8. 结论与下一步
 
