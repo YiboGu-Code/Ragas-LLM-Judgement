@@ -25,7 +25,7 @@
 - [x] 任务 11：Run 生命周期 API（commit: c88f014）
 - [x] 任务 12：导出 API（jsonl/csv/json）（commit: a36621f）
 - [x] 任务 13：脱敏与 artifacts 开关（commit: 3b291dd）
-- [ ] 任务 14：Dockerfile + GitHub Actions CI
+- [x] 任务 14：Dockerfile + GitHub Actions CI（commit: 23084e6）
 - [ ] 任务 15：最终验证 + push GitHub
 
 ## 0. 预期目录结构（实现后）
