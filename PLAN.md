@@ -23,8 +23,8 @@
 - [x] 任务 9：基础指标与严格 skipped 规则（commit: a8411cf）
 - [x] 任务 10：Ragas 指标封装（requirements + skipped）（commit: 94b30c7）
 - [x] 任务 11：Run 生命周期 API（commit: c88f014）
-- [ ] 任务 12：导出 API（jsonl/csv/json）
-- [ ] 任务 13：脱敏与 artifacts 开关
+- [x] 任务 12：导出 API（jsonl/csv/json）（commit: a36621f）
+- [x] 任务 13：脱敏与 artifacts 开关（commit: 3b291dd）
 - [ ] 任务 14：Dockerfile + GitHub Actions CI
 - [ ] 任务 15：最终验证 + push GitHub
 
