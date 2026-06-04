@@ -26,7 +26,7 @@
 - [x] 任务 12：导出 API（jsonl/csv/json）（commit: a36621f）
 - [x] 任务 13：脱敏与 artifacts 开关（commit: 3b291dd）
 - [x] 任务 14：Dockerfile + GitHub Actions CI（commit: 23084e6）
-- [ ] 任务 15：最终验证 + push GitHub
+- [x] 任务 15：最终验证 + push GitHub（commit: 3d99be0；push 失败：网络连接被重置）
 
 ## 0. 预期目录结构（实现后）
 

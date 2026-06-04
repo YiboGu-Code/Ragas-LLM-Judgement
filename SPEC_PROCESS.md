@@ -205,3 +205,59 @@
 
 - 你已审查并确认当前 [SPEC.md](file:///e:/Homework/SEEC3/RagasTest/SPEC.md) 与 [PLAN.md](file:///e:/Homework/SEEC3/RagasTest/PLAN.md) 可进入实现阶段。
 - 下一步将采用“子代理驱动（subagent-driven-development）”执行 PLAN 中的任务，并在实现过程中持续更新 PLAN 勾选与 commit hash，同时记录 `AGENT_LOG.md`。
+
+## 9. 最终验证与 push 证据（任务 15）
+
+本节记录“完成前的可重复验证证据”和“push GitHub 的尝试结果”，对应 [PLAN.md](file:///e:/Homework/SEEC3/RagasTest/PLAN.md) 的任务 15。
+
+### 9.1 静态检查（ruff）
+
+环境说明：当前环境中 `ruff` 命令不可直接调用，需要通过 `python -m ruff` 调用。
+
+执行命令：
+
+```bash
+python -m ruff check .
+```
+
+观察到输出（节选）：
+
+```txt
+All checks passed!
+```
+
+### 9.2 单元测试（pytest）
+
+执行命令：
+
+```bash
+python -m pytest -q
+```
+
+观察到输出（节选）：
+
+```txt
+20 passed in 0.80s
+```
+
+补充说明：为避免 anyio 默认参数化到 `trio` 后在当前环境触发 “There is no current event loop” 报错，新增了 `tests/conftest.py` 固定 `anyio_backend = "asyncio"`，使 async 测试在所有环境下稳定运行（commit：3d99be0）。
+
+### 9.3 push GitHub
+
+远端：
+
+- origin: `https://github.com/YiboGu-Code/-Ragas-LLM-.git`
+
+执行命令：
+
+```bash
+git push -u origin main
+```
+
+结果：失败（网络错误）。
+
+错误信息（节选）：
+
+```txt
+fatal: unable to access 'https://github.com/YiboGu-Code/-Ragas-LLM-.git/': Recv failure: Connection was reset
+```
