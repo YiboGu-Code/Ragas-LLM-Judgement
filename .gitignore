@@ -6,6 +6,6 @@ __pycache__/
 .env
 .worktrees
 .worktrees/
-data/
-artifacts/
+/data/
+/artifacts/
 *.db

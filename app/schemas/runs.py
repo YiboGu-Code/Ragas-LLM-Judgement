@@ -22,6 +22,7 @@ class ExecutionConfig(BaseModel):
     max_concurrency: int | None = None
     timeout_seconds: float | None = None
     save_artifacts: bool | None = None
+    artifact_redaction: str | None = None
 
 
 class RunCreateRequest(BaseModel):

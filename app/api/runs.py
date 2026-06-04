@@ -14,7 +14,8 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.datasets.validator import validate_jsonl_lines
-from app.db.models import Dataset, Run, RunItem
+from app.artifacts.store import save_trace_artifact
+from app.db.models import Artifact, Dataset, Run, RunItem
 from app.execution.engine import RunEngine
 from app.schemas.runs import RunCreateRequest, RunCreateResponse, RunGetResponse, RunItemsResponse
 
@@ -66,6 +67,10 @@ async def _execute_run_async(*, app, run_id: str) -> None:
     sut_config = config["sut"]["adapter_config"]
     metric_confs = config["metrics"]
     exec_conf = config.get("execution") or {}
+    save_artifacts = exec_conf.get("save_artifacts")
+    if save_artifacts is None:
+        save_artifacts = settings.save_artifacts
+    redaction_policy = exec_conf.get("artifact_redaction") or "default_v1"
 
     adapter_cls = registry.get_sut_adapter(sut_name)
     adapter = adapter_cls(**sut_config)
@@ -102,6 +107,24 @@ async def _execute_run_async(*, app, run_id: str) -> None:
             out_json = item.get("output")
             error_json = item.get("error")
             trace_ref = None
+            if save_artifacts and item.get("trace") is not None:
+                artifact_id, artifact_path = save_trace_artifact(
+                    artifact_dir=settings.artifact_dir,
+                    run_id=run_id,
+                    record_id=str(item.get("record_id") or ""),
+                    trace=item.get("trace") or {},
+                    redaction_policy=redaction_policy,
+                )
+                session.add(
+                    Artifact(
+                        id=artifact_id,
+                        run_id=run_id,
+                        record_id=str(item.get("record_id") or ""),
+                        path=artifact_path,
+                        redaction_policy=redaction_policy,
+                    )
+                )
+                trace_ref = artifact_path
             ri = RunItem(
                 id=str(uuid.uuid4()),
                 run_id=run_id,
@@ -229,6 +252,7 @@ def get_run_items(request: Request, run_id: str):
                     "status": it.status,
                     "error": it.error_json,
                     "output": it.output_json,
+                    "trace_ref": it.trace_ref,
                     "metrics": (it.metrics_json or {}).get("metrics", []),
                     "duration_ms": it.duration_ms,
                 }
@@ -263,6 +287,7 @@ def export_run(request: Request, run_id: str, format: str = Query(..., pattern="
                     "status": it.status,
                     "error": it.error_json,
                     "output": it.output_json,
+                    "trace_ref": it.trace_ref,
                     "metrics": metrics,
                     "duration_ms": it.duration_ms,
                 }
