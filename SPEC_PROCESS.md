@@ -197,6 +197,9 @@
   - 先写失败测试 `tests/test_artifacts_redaction.py`，覆盖 `save_artifacts=true/false` 与脱敏规则；初始实现未落盘、无 trace_ref（红灯）。
   - 添加 `app/artifacts/redaction.py` 与 `app/artifacts/store.py`，并在 Run 执行落库时按开关写入 artifacts、记录 `trace_ref`，对敏感字符串做默认脱敏（绿灯）。
   - 当前实现提交：3b291dd。
+- Task 14（Dockerfile + GitHub Actions CI）：
+  - 添加 `Dockerfile`（启动 `uvicorn app.main:app`）与 `.github/workflows/ci.yml`（pytest + docker build），以及 `.dockerignore` 控制构建上下文。
+  - 当前实现提交：23084e6。
 
 ## 8. 结论与下一步
 
