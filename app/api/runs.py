@@ -53,7 +53,7 @@ async def _execute_run_async(*, app, run_id: str) -> None:
             return
         try:
             records = _load_records_for_run(dataset=ds)
-        except Exception as e:
+        except Exception:
             run.status = "failed"
             run.finished_at = datetime.now(timezone.utc)
             run.progress_total = 0
