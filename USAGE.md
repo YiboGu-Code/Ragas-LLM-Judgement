@@ -255,7 +255,7 @@ cat > run_create.json <<'JSON'
     "config": {
       "base_url": "https://ark.cn-beijing.volces.com/api/v3",
       "model": "doubao-seed-2-0-mini-260428",
-      "embedding_model": "<EMBEDDING_MODEL_ID>"
+      "embedding_model": "doubao-embedding-vision-251215"
     }
   },
   "execution": { "max_concurrency": 2, "timeout_seconds": 10, "save_artifacts": true, "artifact_redaction": "default_v1" }
@@ -284,7 +284,7 @@ curl -X POST http://127.0.0.1:8000/runs \
     "config": {
       "base_url": "https://ark.cn-beijing.volces.com/api/v3",
       "model": "doubao-seed-2-0-mini-260428",
-      "embedding_model": "<EMBEDDING_MODEL_ID>"
+      "embedding_model": "doubao-embedding-vision-251215"
     }
   },
   "execution": { "max_concurrency": 2, "timeout_seconds": 10, "save_artifacts": true, "artifact_redaction": "default_v1" }
