@@ -23,6 +23,16 @@ from app.schemas.runs import RunCreateRequest, RunCreateResponse, RunGetResponse
 router = APIRouter()
 
 
+def _provider_config_contains_secrets(config: Any) -> bool:
+    if not isinstance(config, dict):
+        return False
+    forbidden = ("api_key", "access_token", "token", "secret", "password")
+    for k in config.keys():
+        if isinstance(k, str) and any(s in k.lower() for s in forbidden):
+            return True
+    return False
+
+
 def _load_records_for_run(*, dataset: Dataset) -> list[dict[str, Any]]:
     if not dataset.raw_path:
         raise ValueError("dataset raw_path is missing")
@@ -66,6 +76,7 @@ async def _execute_run_async(*, app, run_id: str) -> None:
     sut_name = config["sut"]["adapter_name"]
     sut_config = config["sut"]["adapter_config"]
     metric_confs = config["metrics"]
+    provider_ref = config.get("provider_ref") or {}
     exec_conf = config.get("execution") or {}
     save_artifacts = exec_conf.get("save_artifacts")
     if save_artifacts is None:
@@ -74,6 +85,27 @@ async def _execute_run_async(*, app, run_id: str) -> None:
 
     adapter_cls = registry.get_sut_adapter(sut_name)
     adapter = adapter_cls(**sut_config)
+
+    provider = None
+    provider_name = provider_ref.get("provider_name")
+    provider_config = provider_ref.get("config") or {}
+    if provider_name and provider_name not in ("manual", "none"):
+        try:
+            provider_cls = registry.get_provider(str(provider_name))
+            try:
+                provider = provider_cls(**provider_config)
+            except TypeError:
+                provider = provider_cls()
+        except KeyError:
+            provider = None
+        except Exception:
+            with SessionLocal() as session:
+                run = session.get(Run, run_id)
+                if run is not None:
+                    run.status = "failed"
+                    run.finished_at = datetime.now(timezone.utc)
+                    session.commit()
+            return
 
     metrics = []
     for mc in metric_confs:
@@ -89,7 +121,7 @@ async def _execute_run_async(*, app, run_id: str) -> None:
         timeout_seconds=float(exec_conf.get("timeout_seconds") or settings.default_timeout_seconds),
     )
 
-    result = await engine.run(records=records, adapter=adapter, metrics=metrics, provider=None)
+    result = await engine.run(records=records, adapter=adapter, metrics=metrics, provider=provider)
 
     with SessionLocal() as session:
         run = session.get(Run, run_id)
@@ -160,6 +192,15 @@ def create_run(request: Request, payload: RunCreateRequest):
             registry.get_metric(mc.metric_name)
         except KeyError as e:
             raise HTTPException(status_code=422, detail="unknown metric") from e
+
+    if _provider_config_contains_secrets(payload.provider_ref.config):
+        raise HTTPException(status_code=422, detail="provider_ref.config must not include secrets; use environment variables")
+
+    if payload.provider_ref.provider_name not in ("manual", "none"):
+        try:
+            registry.get_provider(payload.provider_ref.provider_name)
+        except KeyError as e:
+            raise HTTPException(status_code=422, detail="unknown provider") from e
 
     with SessionLocal() as session:
         ds = session.get(Dataset, payload.dataset_id)

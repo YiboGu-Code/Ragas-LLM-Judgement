@@ -26,13 +26,26 @@ def create_app() -> FastAPI:
     app.state.registry = PluginRegistry()
 
     from app.metrics.basic import RagContextsPresentMetric
-    from app.metrics.ragas_metrics import RagasAnswerRelevancyMetric, RagasFaithfulnessMetric
+    from app.metrics.ragas_metrics import (
+        RagasAgentGoalAccuracyMetric,
+        RagasAnswerCorrectnessMetric,
+        RagasAnswerRelevancyMetric,
+        RagasContextPrecisionMetric,
+        RagasContextRecallMetric,
+        RagasFaithfulnessMetric,
+    )
+    from app.providers import ArkProvider
     from app.sut.http_adapter import HttpSUTAdapter
 
     app.state.registry.register_metric(RagContextsPresentMetric)
     app.state.registry.register_metric(RagasFaithfulnessMetric)
     app.state.registry.register_metric(RagasAnswerRelevancyMetric)
+    app.state.registry.register_metric(RagasContextPrecisionMetric)
+    app.state.registry.register_metric(RagasContextRecallMetric)
+    app.state.registry.register_metric(RagasAnswerCorrectnessMetric)
+    app.state.registry.register_metric(RagasAgentGoalAccuracyMetric)
     app.state.registry.register_sut_adapter(HttpSUTAdapter)
+    app.state.registry.register_provider(ArkProvider)
 
     @app.get("/healthz")
     def healthz():
