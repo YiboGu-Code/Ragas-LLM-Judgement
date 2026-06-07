@@ -28,7 +28,7 @@ class ExecutionConfig(BaseModel):
 class RunCreateRequest(BaseModel):
     dataset_id: str
     eval_type: str
-    sut: SutConfig
+    sut: SutConfig | None = None
     metrics: list[MetricConfig]
     provider_ref: ProviderRef
     execution: ExecutionConfig | None = None

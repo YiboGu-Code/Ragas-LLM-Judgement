@@ -1,0 +1,29 @@
+services:
+  backend:
+    image: ragastest-backend:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend_data:/app/data
+      - backend_artifacts:/app/artifacts
+    restart: unless-stopped
+
+  frontend:
+    image: ragastest-frontend:local
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  backend_data:
+  backend_artifacts:

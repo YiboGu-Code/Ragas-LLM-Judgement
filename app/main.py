@@ -5,12 +5,14 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from app.core.config import Settings
+from app.core.dotenv import load_dotenv
 from app.db.migrate import create_all
 from app.db.session import create_engine_and_sessionmaker
 from app.plugins.registry import PluginRegistry
 
 
 def create_app() -> FastAPI:
+    load_dotenv()
     settings = Settings()
 
     sqlite_path = Path(settings.sqlite_path)
@@ -35,6 +37,7 @@ def create_app() -> FastAPI:
         RagasFaithfulnessMetric,
     )
     from app.providers import ArkProvider
+    from app.sut.dataset_adapter import DatasetSUTAdapter
     from app.sut.http_adapter import HttpSUTAdapter
 
     app.state.registry.register_metric(RagContextsPresentMetric)
@@ -45,6 +48,7 @@ def create_app() -> FastAPI:
     app.state.registry.register_metric(RagasAnswerCorrectnessMetric)
     app.state.registry.register_metric(RagasAgentGoalAccuracyMetric)
     app.state.registry.register_sut_adapter(HttpSUTAdapter)
+    app.state.registry.register_sut_adapter(DatasetSUTAdapter)
     app.state.registry.register_provider(ArkProvider)
 
     @app.get("/healthz")

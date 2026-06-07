@@ -3,10 +3,10 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
 
 from app.datasets.validator import validate_jsonl_lines
-from app.db.models import Dataset
+from app.db.models import Dataset, Run
 from app.schemas.datasets import DatasetCreateResponse, DatasetGetResponse
 
 
@@ -78,3 +78,28 @@ def get_dataset(request: Request, dataset_id: str):
             records_count=ds.records_count,
             raw_path=ds.raw_path,
         )
+
+
+@router.delete("/datasets/{dataset_id}", status_code=204)
+def delete_dataset(request: Request, dataset_id: str):
+    SessionLocal = request.app.state.SessionLocal
+
+    with SessionLocal() as session:
+        ds = session.get(Dataset, dataset_id)
+        if ds is None:
+            raise HTTPException(status_code=404, detail="dataset not found")
+
+        existing_run = session.query(Run).filter(Run.dataset_id == dataset_id).first()
+        if existing_run is not None:
+            raise HTTPException(status_code=409, detail="dataset is referenced by runs; delete runs first")
+
+        if ds.raw_path:
+            try:
+                Path(ds.raw_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        session.delete(ds)
+        session.commit()
+
+    return Response(status_code=204)

@@ -9,6 +9,12 @@
 
 平台通过“数据集（JSONL）→ Run（执行）→ Items（逐条结果）→ 导出（JSONL/CSV/JSON）”形成闭环；模型与被测系统（SUT）均通过抽象接口/HTTP 适配器接入，平台核心不绑定任何特定模型 SDK。
 
+补充说明：
+
+- 平台支持两种运行模式：
+  - 数据集评测（推荐）：不需要接入外部 SUT。你在 JSONL 中直接提供每条样本的 `output` / `trace`，平台只负责跑指标（Ragas 等）并产出结果。
+  - SUT 评测（可选）：你提供一个对外服务的被测系统（SUT），平台通过 HTTP 调用 `POST /execute` 获取 `output` / `trace` 后再跑指标。
+
 ---
 
 ## 1. 快速启动
@@ -98,10 +104,12 @@ $env:APP_SAVE_ARTIFACTS="true"
 
 - `ARK_API_KEY`：方舟 API Key。必须通过环境变量提供，不要写进 `provider_ref.config`。
 
-示例（Windows PowerShell）：
+本项目会在启动时自动读取根目录的 `.env`，并将其中的键值注入到当前进程的环境变量中（如果系统环境变量已经存在，则默认不覆盖）。
 
-```powershell
-$env:ARK_API_KEY="YOUR_ARK_API_KEY"
+`.env` 示例：
+
+```env
+ARK_API_KEY=YOUR_ARK_API_KEY
 ```
 
 ---
@@ -121,6 +129,9 @@ $env:ARK_API_KEY="YOUR_ARK_API_KEY"
 - 必须符合对应 `eval_type` 的严格 schema
 - 空文件/空数据集会被拒绝
 - 校验失败会返回 422，并包含行号信息（例如 `schema error line=3: ...`）
+- 除了严格 schema 要求的字段外，每条 record 还可以额外包含：
+  - `output`：该条样本的输出（用于“数据集评测”模式）
+  - `trace`：该条样本的轨迹（用于依赖 contexts / agent messages 的指标）
 
 ### 3.1 Prompt 数据集示例
 
@@ -129,6 +140,21 @@ $env:ARK_API_KEY="YOUR_ARK_API_KEY"
 ```jsonl
 {"record_id":"p1","type":"prompt","input":{"user_input":"用一句话解释什么是单元测试","system_prompt":"你是一个严谨的软件工程助教"}}
 {"record_id":"p2","type":"prompt","input":{"user_input":"把下面这句英文翻译成中文：Hello world."}}
+```
+
+如果使用“数据集评测”模式，需要在数据集中提供 `output` 或 `trace.output`（否则该条样本没有可评测的输出，会被标记为 failed）。例如：
+
+```jsonl
+{
+  "record_id": "p3",
+  "type": "prompt",
+  "input": {
+    "user_input": "用一句话解释什么是单元测试"
+  },
+  "output": {
+    "answer": "单元测试是对最小可测试单元进行验证的自动化测试。"
+  }
+}
 ```
 
 上传：
@@ -231,24 +257,26 @@ Run 生命周期相关接口（见 [runs.py](file:///e:/Homework/SEEC3/RagasTest
 
 说明：
 
-- `sut.adapter_name` 当前内置为 `http`，通过 HTTP 调用外部被测系统（SUT）
+- `sut` 字段现在是可选的：
+  - 不填写 `sut`：默认使用 `dataset` 适配器（不发 HTTP），直接用数据集中的 `output` / `trace` 做评测
+  - 填写 `sut.adapter_name = "http"`：通过 HTTP 调用外部被测系统（SUT）
 - `metrics.metric_name` 可用内置指标包括：
   - `rag_contexts_present`
-  - `ragas_faithfulness`（当前会被标记为 skipped）
-  - `ragas_answer_relevancy`（当前会被标记为 skipped）
+  - `ragas_faithfulness`
+  - `ragas_answer_relevancy`
+  - `ragas_context_precision`
+  - `ragas_context_recall`
+  - `ragas_answer_correctness`
+  - `ragas_agent_goal_accuracy`
 - `provider_ref` 用于指定评测时使用的 LLM/Embedding provider。本项目内置 `ark` provider（火山方舟 OpenAI 兼容）。
 
-创建 run：
+创建 run（数据集评测：不写 `sut`）：
 
 ```bash
 cat > run_create.json <<'JSON'
 {
   "dataset_id": "<DATASET_ID>",
   "eval_type": "rag",
-  "sut": {
-    "adapter_name": "http",
-    "adapter_config": { "base_url": "http://127.0.0.1:9000", "timeout_seconds": 10 }
-  },
   "metrics": [{ "metric_name": "rag_contexts_present", "metric_config": {} }],
   "provider_ref": {
     "provider_name": "ark",
@@ -267,17 +295,13 @@ curl -X POST http://127.0.0.1:8000/runs \
   --data-binary "@run_create.json"
 ```
 
-创建 run（Windows PowerShell）：
+创建 run（Windows PowerShell，数据集评测：不写 `sut`）：
 
 ```powershell
 @'
 {
   "dataset_id": "<DATASET_ID>",
   "eval_type": "rag",
-  "sut": {
-    "adapter_name": "http",
-    "adapter_config": { "base_url": "http://127.0.0.1:9000", "timeout_seconds": 10 }
-  },
   "metrics": [{ "metric_name": "rag_contexts_present", "metric_config": {} }],
   "provider_ref": {
     "provider_name": "ark",
@@ -361,7 +385,7 @@ curl "http://127.0.0.1:8000/runs/<RUN_ID>/export?format=csv"
 
 ## 5. 接入被测系统（SUT）：HTTP /execute 契约
 
-当 run 创建时指定：
+如果你希望评测“一个真实运行的系统”（例如在线 RAG 服务、Agent 服务），可以使用 SUT 模式。当 run 创建时指定：
 
 - `sut.adapter_name = "http"`
 - `sut.adapter_config.base_url = "http://<sut-host>:<sut-port>"`
@@ -446,12 +470,15 @@ uvicorn sut_demo:app --host 127.0.0.1 --port 9000
 
 ### 6.1 为什么 ragas\_\* 指标一直是 skipped？
 
-当前实现里，run 执行时 `provider=None`（平台不内置任何模型调用实现），并且 [ragas_metrics.py](file:///e:/Homework/SEEC3/RagasTest/app/metrics/ragas_metrics.py) 也明确返回 `ragas integration not wired yet`。
+常见原因：
 
-这意味着：
+- 未配置 `ARK_API_KEY`（或 provider 初始化失败），导致 provider 不可用
+- 数据集中没有提供指标所需字段：
+  - 例如 `ragas_faithfulness` 需要 `trace.retrieval.contexts` 和 `trace.output.answer`
+  - 例如 `ragas_answer_relevancy` 需要 `trace.output.answer`
+  - 例如 `ragas_context_precision/recall` 需要 `record.expected.reference` 与 `trace.retrieval.contexts`
 
-- 平台“结构”已准备好（requirements 与 strict skipped 机制）
-- 但实际 ragas 计算尚未接入（需要你实现并注入 ModelProvider，并在执行时传入 provider）
+平台不会替你“补齐”缺失字段，缺字段会被严格标记为 `skipped`。
 
 ### 6.2 artifacts 保存在哪里？如何关闭？
 

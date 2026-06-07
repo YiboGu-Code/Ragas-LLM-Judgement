@@ -4,13 +4,14 @@ import asyncio
 import csv
 import io
 import json
+import shutil
 import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.datasets.validator import validate_jsonl_lines
@@ -28,9 +29,30 @@ def _provider_config_contains_secrets(config: Any) -> bool:
         return False
     forbidden = ("api_key", "access_token", "token", "secret", "password")
     for k in config.keys():
-        if isinstance(k, str) and any(s in k.lower() for s in forbidden):
+        if not isinstance(k, str):
+            continue
+        key = k.lower()
+        if key.endswith("_env"):
+            continue
+        if any(s in key for s in forbidden):
             return True
     return False
+
+
+def _add_run_error_item(*, session, run_id: str, error_type: str, message: str) -> None:
+    session.add(
+        RunItem(
+            id=str(uuid.uuid4()),
+            run_id=run_id,
+            record_id="__run__",
+            status="failed",
+            error_json={"type": error_type, "message": message},
+            output_json=None,
+            trace_ref=None,
+            metrics_json={"metrics": []},
+            duration_ms=None,
+        )
+    )
 
 
 def _load_records_for_run(*, dataset: Dataset) -> list[dict[str, Any]]:
@@ -59,16 +81,18 @@ async def _execute_run_async(*, app, run_id: str) -> None:
         if ds is None:
             run.status = "failed"
             run.finished_at = datetime.now(timezone.utc)
+            _add_run_error_item(session=session, run_id=run_id, error_type="DatasetNotFound", message="dataset not found")
             session.commit()
             return
         try:
             records = _load_records_for_run(dataset=ds)
-        except Exception:
+        except Exception as e:
             run.status = "failed"
             run.finished_at = datetime.now(timezone.utc)
             run.progress_total = 0
             run.progress_failed = 0
             run.progress_completed = 0
+            _add_run_error_item(session=session, run_id=run_id, error_type=e.__class__.__name__, message=str(e))
             session.commit()
             return
 
@@ -98,12 +122,18 @@ async def _execute_run_async(*, app, run_id: str) -> None:
                 provider = provider_cls()
         except KeyError:
             provider = None
-        except Exception:
+        except Exception as e:
             with SessionLocal() as session:
                 run = session.get(Run, run_id)
                 if run is not None:
                     run.status = "failed"
                     run.finished_at = datetime.now(timezone.utc)
+                    _add_run_error_item(
+                        session=session,
+                        run_id=run_id,
+                        error_type=e.__class__.__name__,
+                        message=str(e),
+                    )
                     session.commit()
             return
 
@@ -182,8 +212,9 @@ def create_run(request: Request, payload: RunCreateRequest):
     SessionLocal = request.app.state.SessionLocal
     registry = request.app.state.registry
 
+    sut_obj = payload.sut.model_dump(mode="json") if payload.sut is not None else {"adapter_name": "dataset", "adapter_config": {}}
     try:
-        registry.get_sut_adapter(payload.sut.adapter_name)
+        registry.get_sut_adapter(sut_obj["adapter_name"])
     except KeyError as e:
         raise HTTPException(status_code=422, detail="unknown sut adapter") from e
 
@@ -213,6 +244,7 @@ def create_run(request: Request, payload: RunCreateRequest):
 
         run_id = str(uuid.uuid4())
         snapshot = json.loads(payload.model_dump_json())
+        snapshot["sut"] = sut_obj
         run = Run(
             id=run_id,
             dataset_id=payload.dataset_id,
@@ -398,3 +430,32 @@ def cancel_run(request: Request, run_id: str):
             status=run.status,
             progress={"total": run.progress_total, "completed": run.progress_completed, "failed": run.progress_failed},
         )
+
+
+@router.delete("/runs/{run_id}", status_code=204)
+def delete_run(request: Request, run_id: str):
+    SessionLocal = request.app.state.SessionLocal
+    settings = request.app.state.settings
+
+    with SessionLocal() as session:
+        run = session.get(Run, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        if run.status in ("running", "queued"):
+            raise HTTPException(status_code=409, detail="run is running; cancel before delete")
+
+        artifacts = session.query(Artifact).filter(Artifact.run_id == run_id).all()
+        for a in artifacts:
+            try:
+                Path(a.path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        shutil.rmtree(Path(settings.artifact_dir) / run_id, ignore_errors=True)
+
+        session.query(Artifact).filter(Artifact.run_id == run_id).delete(synchronize_session=False)
+        session.query(RunItem).filter(RunItem.run_id == run_id).delete(synchronize_session=False)
+        session.delete(run)
+        session.commit()
+
+    return Response(status_code=204)

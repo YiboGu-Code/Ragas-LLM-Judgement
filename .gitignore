@@ -9,3 +9,6 @@ __pycache__/
 /data/
 /artifacts/
 *.db
+.superpowers/
+/dataset/
+ragastest-images.tar

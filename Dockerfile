@@ -1,6 +1,8 @@
-FROM python:3.11-slim
+FROM mcr.microsoft.com/devcontainers/python:3.11
 
 WORKDIR /app
+
+USER root
 
 COPY requirements.txt requirements-dev.txt ./
 RUN pip install --no-cache-dir -r requirements.txt

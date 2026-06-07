@@ -14,6 +14,8 @@ class BaseRecord(BaseModel):
     input: dict[str, Any]
     expected: dict[str, Any] | None = None
     tags: dict[str, Any] | None = None
+    output: dict[str, Any] | str | None = None
+    trace: dict[str, Any] | None = None
 
 
 class PromptInput(BaseModel):
@@ -29,6 +31,8 @@ class PromptRecord(BaseModel):
     input: PromptInput
     expected: dict[str, Any] | None = None
     tags: dict[str, Any] | None = None
+    output: dict[str, Any] | str | None = None
+    trace: dict[str, Any] | None = None
 
 
 class RagInput(BaseModel):
@@ -42,6 +46,8 @@ class RagRecord(BaseModel):
     input: RagInput
     expected: dict[str, Any] | None = None
     tags: dict[str, Any] | None = None
+    output: dict[str, Any] | str | None = None
+    trace: dict[str, Any] | None = None
 
 
 class WorkflowInput(BaseModel):
@@ -56,6 +62,8 @@ class WorkflowRecord(BaseModel):
     input: WorkflowInput
     expected: dict[str, Any] | None = None
     tags: dict[str, Any] | None = None
+    output: dict[str, Any] | str | None = None
+    trace: dict[str, Any] | None = None
 
 
 class AgentInput(BaseModel):
@@ -71,3 +79,5 @@ class AgentRecord(BaseModel):
     input: AgentInput
     expected: dict[str, Any] | None = None
     tags: dict[str, Any] | None = None
+    output: dict[str, Any] | str | None = None
+    trace: dict[str, Any] | None = None
