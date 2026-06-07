@@ -1,6 +1,6 @@
 # AI4SE 期末项目：使用 Superpowers 进行规约驱动的智能体开发
 
-> *Spec-Driven, Subagent-Built, Human-Owned.*
+> _Spec-Driven, Subagent-Built, Human-Owned._
 
 ---
 
@@ -246,3 +246,33 @@ Superpowers 给你的是"流程脚手架"——它替你管住了 TDD、评审�
 如果你只是把题目扔给 Superpowers 然后把结果原封不动交上来，你很难真正完成本项目的目标——本项目鼓励 **你能解释 Superpowers 为什么这样做、它在哪里仍然不够好、你如何引导它做对**。
 
 希望这个项目让你对自己作为软件工程师在 AI 时代的角色，有一个更清醒、更踏实的认识。
+
+---
+
+## 附录：本仓库交付物对照（assessment_project）
+
+本节用于将本仓库的实际文件与「五、最终交付物清单」逐项对照，方便自检与助教验收。
+
+1. `SPEC.md`、`PLAN.md`、`SPEC_PROCESS.md`
+   - SPEC：[SPEC.md](file:///e:/Homework/SEEC3/RagasTest/SPEC.md)
+   - PLAN：[PLAN.md](file:///e:/Homework/SEEC3/RagasTest/PLAN.md)
+   - 过程记录：[SPEC_PROCESS.md](file:///e:/Homework/SEEC3/RagasTest/SPEC_PROCESS.md)
+2. 完整源代码
+   - 后端：`app/`
+   - 前端：`frontend/`
+   - 后端测试：`tests/`
+3. 容器化
+   - 后端镜像：[Dockerfile](file:///e:/Homework/SEEC3/RagasTest/Dockerfile)
+   - 前端镜像：[frontend/Dockerfile](file:///e:/Homework/SEEC3/RagasTest/frontend/Dockerfile)
+   - 一键部署：[docker-compose.yml](file:///e:/Homework/SEEC3/RagasTest/docker-compose.yml)
+   - 镜像打包步骤：[docker-images-build.md](file:///e:/Homework/SEEC3/RagasTest/docker-images-build.md)
+4. README
+   - [README.md](file:///e:/Homework/SEEC3/RagasTest/README.md)
+5. `AGENT_LOG.md`
+   - [AGENT_LOG.md](file:///e:/Homework/SEEC3/RagasTest/AGENT_LOG.md)
+6. CI 配置
+   - `.github/workflows/ci.yml`：[ci.yml](file:///e:/Homework/SEEC3/RagasTest/.github/workflows/ci.yml)
+7. `REFLECTION.md`
+   - [REFLECTION.md](file:///e:/Homework/SEEC3/RagasTest/REFLECTION.md)
+8. （可选）线上部署 URL
+   - 见 [README.md](file:///e:/Homework/SEEC3/RagasTest/README.md)「在线访问」：`http://172.29.4.237/`（仅校园网可访问）
