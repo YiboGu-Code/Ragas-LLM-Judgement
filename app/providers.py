@@ -4,9 +4,10 @@ import asyncio
 import os
 from typing import Any
 
+import instructor
 from openai import AsyncOpenAI
 from ragas.embeddings.base import BaseRagasEmbeddings
-from ragas.llms import llm_factory
+from ragas.llms.base import InstructorLLM, InstructorModelArgs
 
 from app.core.dotenv import load_dotenv
 
@@ -88,21 +89,34 @@ class ArkProvider:
         embedding_model: str | None = None,
         api_key_env: str = "ARK_API_KEY",
     ) -> None:
+        load_dotenv()
+
         api_key = os.getenv(api_key_env)
-        if not api_key:
-            load_dotenv()
-            api_key = os.getenv(api_key_env)
         if not api_key:
             raise ValueError(f"missing environment variable {api_key_env}")
 
         self._base_url = base_url or "https://ark.cn-beijing.volces.com/api/v3"
-        self._model = model or "doubao-seed-2-0-mini-260428"
+        resolved_model = model or os.getenv("ARK_MODEL")
+        if not resolved_model:
+            raise ValueError("missing environment variable ARK_MODEL")
+        self._model = resolved_model
         self._embedding_model = embedding_model or "doubao-embedding-vision-251215"
         self._client = AsyncOpenAI(base_url=self._base_url, api_key=api_key)
         self._api_key = api_key
 
     def get_ragas_llm(self):
-        return llm_factory(self._model, provider="openai", client=self._client)
+        mode_name = os.getenv("ARK_INSTRUCTOR_MODE") or "TOOLS"
+        mode = getattr(instructor.Mode, mode_name, None)
+        if mode is None:
+            raise ValueError(f"invalid ARK_INSTRUCTOR_MODE: {mode_name}")
+        patched_client = instructor.from_openai(self._client, mode=mode)
+        max_tokens = int(os.getenv("RAGAS_LLM_MAX_TOKENS") or "512")
+        return InstructorLLM(
+            client=patched_client,
+            model=self._model,
+            provider="openai",
+            model_args=InstructorModelArgs(max_tokens=max_tokens),
+        )
 
     def get_ragas_embeddings(self):
         if not self._embedding_model:

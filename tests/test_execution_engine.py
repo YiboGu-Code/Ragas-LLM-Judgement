@@ -54,3 +54,55 @@ async def test_engine_timeout_marks_item_failed():
     )
     assert results["summary"]["failed"] == 1
     assert results["items"][0]["status"] == "failed"
+
+
+class ExplodingMetric:
+    name = "exploding_metric"
+    version = "1"
+    requirements = MetricRequirement()
+
+    async def evaluate(self, *, record, trace, provider):
+        raise ValueError("boom")
+
+
+class SlowMetric:
+    name = "slow_metric"
+    version = "1"
+    requirements = MetricRequirement()
+
+    async def evaluate(self, *, record, trace, provider):
+        import asyncio
+
+        await asyncio.sleep(0.1)
+        return MetricResult(name=self.name, status="ok", score=1.0, details={}, version=self.version)
+
+
+@pytest.mark.anyio
+async def test_engine_metric_exception_does_not_crash_item():
+    engine = RunEngine(max_concurrency=1, timeout_seconds=1)
+    results = await engine.run(
+        records=[{"record_id": "r1", "type": "prompt", "input": {"x": "a"}}],
+        adapter=DummyAdapter(),
+        metrics=[ExplodingMetric(), DummyMetric()],
+        provider=None,
+    )
+    assert results["summary"]["failed"] == 1
+    assert results["items"][0]["status"] == "failed"
+    assert [m["name"] for m in results["items"][0]["metrics"]] == ["exploding_metric", "dummy_metric"]
+    assert results["items"][0]["metrics"][0]["status"] == "failed"
+    assert results["items"][0]["metrics"][1]["status"] == "ok"
+
+
+@pytest.mark.anyio
+async def test_engine_metric_timeout_marks_metric_failed():
+    engine = RunEngine(max_concurrency=1, timeout_seconds=0.01)
+    results = await engine.run(
+        records=[{"record_id": "r1", "type": "prompt", "input": {"x": "a"}}],
+        adapter=DummyAdapter(),
+        metrics=[SlowMetric()],
+        provider=None,
+    )
+    assert results["summary"]["failed"] == 0
+    assert results["items"][0]["status"] == "succeeded"
+    assert results["items"][0]["metrics"][0]["name"] == "slow_metric"
+    assert results["items"][0]["metrics"][0]["status"] == "skipped"

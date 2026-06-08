@@ -151,7 +151,7 @@ export default function RunCreatePage() {
   const [arkBaseUrl, setArkBaseUrl] = useState(
     "https://ark.cn-beijing.volces.com/api/v3",
   );
-  const [arkModel, setArkModel] = useState("doubao-seed-2-0-mini-260428");
+  const [arkModel, setArkModel] = useState("deepseek-v3-2-251201");
   const [arkEmbeddingModel, setArkEmbeddingModel] = useState(
     "doubao-embedding-vision-251215",
   );

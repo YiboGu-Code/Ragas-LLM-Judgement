@@ -23,6 +23,7 @@
 ### 1.3 Item（逐条评测结果）
 
 每条 record 会生成一个 item，包含：
+
 - `status`: `succeeded|failed`
 - `output`: 该条样本的输出（dataset-only 模式来自 dataset 的 `output/trace`；SUT 模式来自 /execute）
 - `metrics`: 多个指标的计算结果（每个指标 `ok|skipped|failed`）
@@ -82,7 +83,7 @@
 ### 4.3 Ark Provider 的密钥
 
 - `ARK_API_KEY` 必须通过环境变量提供（后端启动时会自动读取根目录 `.env` 注入）。
-- 前端 **不要** 把密钥放到 `provider_ref.config`，后端会拒绝（见 [runs.py:_provider_config_contains_secrets](file:///e:/Homework/SEEC3/RagasTest/app/api/runs.py#L26-L38)）。
+- 前端 **不要** 把密钥放到 `provider_ref.config`，后端会拒绝（见 [runs.py:\_provider_config_contains_secrets](file:///e:/Homework/SEEC3/RagasTest/app/api/runs.py#L26-L38)）。
 
 ---
 
@@ -127,14 +128,12 @@
   "dataset_id": "uuid",
   "eval_type": "prompt|rag|workflow|agent",
   "sut": null,
-  "metrics": [
-    { "metric_name": "ragas_answer_relevancy", "metric_config": {} }
-  ],
+  "metrics": [{ "metric_name": "ragas_answer_relevancy", "metric_config": {} }],
   "provider_ref": {
     "provider_name": "ark|manual|none",
     "config": {
       "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-      "model": "doubao-seed-2-0-mini-260428",
+      "model": "deepseek-v3-2-251201",
       "embedding_model": "doubao-embedding-vision-251215"
     }
   },
@@ -148,6 +147,7 @@
 ```
 
 说明：
+
 - dataset-only：把 `sut` 直接省略或传 `null`。
 - `provider_ref.provider_name="none"` 时，Ragas 类指标会因缺 provider 而 `skipped`。
 
@@ -179,7 +179,13 @@
       "output": { "answer": "..." },
       "trace_ref": "artifacts\\<RUN_ID>\\p1.json",
       "metrics": [
-        { "name": "ragas_answer_relevancy", "status": "ok|skipped|failed", "score": 0.8, "details": {}, "version": "1" }
+        {
+          "name": "ragas_answer_relevancy",
+          "status": "ok|skipped|failed",
+          "score": 0.8,
+          "details": {},
+          "version": "1"
+        }
       ],
       "duration_ms": 1234
     }
@@ -194,6 +200,7 @@
 上传校验逻辑见 [validator.py](file:///e:/Homework/SEEC3/RagasTest/app/datasets/validator.py#L21-L43) 与 [records.py](file:///e:/Homework/SEEC3/RagasTest/app/datasets/records.py)。
 
 共同约束：
+
 - 每行必须是 JSON object
 - `type` 必须与上传时的 `eval_type` 一致（比如上传 `eval_type=prompt`，每行 `type` 必须是 `"prompt"`）
 - 可选字段（dataset-only 推荐用到）：
@@ -205,13 +212,35 @@
 最小必填：
 
 ```jsonl
-{"record_id":"p1","type":"prompt","input":{"user_input":"...","system_prompt":"..."}}
+{
+  "record_id": "p1",
+  "type": "prompt",
+  "input": {
+    "user_input": "...",
+    "system_prompt": "..."
+  }
+}
 ```
 
 dataset-only 推荐：
 
 ```jsonl
-{"record_id":"p1","type":"prompt","input":{"user_input":"...","system_prompt":"..."},"output":{"answer":"..."},"trace":{"output":{"answer":"..."}}}
+{
+  "record_id": "p1",
+  "type": "prompt",
+  "input": {
+    "user_input": "...",
+    "system_prompt": "..."
+  },
+  "output": {
+    "answer": "..."
+  },
+  "trace": {
+    "output": {
+      "answer": "..."
+    }
+  }
+}
 ```
 
 ### 6.2 RAG record
@@ -219,25 +248,97 @@ dataset-only 推荐：
 最小必填：
 
 ```jsonl
-{"record_id":"r1","type":"rag","input":{"question":"...","retrieval_config":{"top_k":3}}}
+{
+  "record_id": "r1",
+  "type": "rag",
+  "input": {
+    "question": "...",
+    "retrieval_config": {
+      "top_k": 3
+    }
+  }
+}
 ```
 
 dataset-only + Ragas contexts 指标推荐：
 
 ```jsonl
-{"record_id":"r1","type":"rag","input":{"question":"..."},"expected":{"reference":"..."},"trace":{"output":{"answer":"..."},"retrieval":{"contexts":[{"id":"c1","text":"...","source":"dataset"}]}}}
+{
+  "record_id": "r1",
+  "type": "rag",
+  "input": {
+    "question": "..."
+  },
+  "expected": {
+    "reference": "..."
+  },
+  "trace": {
+    "output": {
+      "answer": "..."
+    },
+    "retrieval": {
+      "contexts": [
+        {
+          "id": "c1",
+          "text": "...",
+          "source": "dataset"
+        }
+      ]
+    }
+  }
+}
 ```
 
 ### 6.3 Workflow record
 
 ```jsonl
-{"record_id":"w1","type":"workflow","input":{"goal":"...","inputs":{"k":"v"}},"output":{"answer":"..."},"trace":{"output":{"answer":"..."}}}
+{
+  "record_id": "w1",
+  "type": "workflow",
+  "input": {
+    "goal": "...",
+    "inputs": {
+      "k": "v"
+    }
+  },
+  "output": {
+    "answer": "..."
+  },
+  "trace": {
+    "output": {
+      "answer": "..."
+    }
+  }
+}
 ```
 
 ### 6.4 Agent record
 
 ```jsonl
-{"record_id":"a1","type":"agent","input":{"task":"..."},"output":{"answer":"..."},"trace":{"agent":{"messages":[{"role":"user","content":"..."},{"role":"assistant","content":"..."}]}}}
+{
+  "record_id": "a1",
+  "type": "agent",
+  "input": {
+    "task": "..."
+  },
+  "output": {
+    "answer": "..."
+  },
+  "trace": {
+    "agent": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "..."
+        },
+        {
+          "role": "assistant",
+          "content": "..."
+        }
+      ]
+    }
+  }
+}
 ```
 
 ---
@@ -262,6 +363,7 @@ dataset-only + Ragas contexts 指标推荐：
 - `ragas_agent_goal_accuracy`
 
 前端可将每个指标的“常见 skipped 原因”提示给用户（来自 MetricResult.details.reason）：
+
 - 缺 provider：`missing provider`
 - 缺 trace 输出：`missing trace.output.answer`
 - 缺 contexts：`missing trace.retrieval.contexts`
@@ -273,6 +375,7 @@ dataset-only + Ragas contexts 指标推荐：
 ## 8. Provider（模型提供方）与配置
 
 目前注册 provider：
+
 - `ark`（见 [providers.py](file:///e:/Homework/SEEC3/RagasTest/app/providers.py#L80-L120)）
 
 前端可用的 provider_ref 示例：
@@ -282,13 +385,14 @@ dataset-only + Ragas contexts 指标推荐：
   "provider_name": "ark",
   "config": {
     "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-    "model": "doubao-seed-2-0-mini-260428",
+    "model": "deepseek-v3-2-251201",
     "embedding_model": "doubao-embedding-vision-251215"
   }
 }
 ```
 
 注意：
+
 - 真实密钥通过环境变量 `ARK_API_KEY` 注入，不在 config 里传。
 - `embedding_model` 只在需要 embedding 的指标时必须（例如 `ragas_answer_relevancy`、`ragas_answer_correctness`）。
 
@@ -297,6 +401,7 @@ dataset-only + Ragas contexts 指标推荐：
 ## 9. 全量 HTTP API 清单（前端调用）
 
 所有路由来源：
+
 - [datasets.py](file:///e:/Homework/SEEC3/RagasTest/app/api/datasets.py)
 - [runs.py](file:///e:/Homework/SEEC3/RagasTest/app/api/runs.py)
 - [main.py](file:///e:/Homework/SEEC3/RagasTest/app/main.py)
@@ -318,6 +423,7 @@ dataset-only + Ragas contexts 指标推荐：
 Content-Type：`multipart/form-data`
 
 字段：
+
 - `eval_type`：`prompt|rag|workflow|agent`
 - `file`：JSONL 文件（UTF-8）
 - `name`（可选）
@@ -325,6 +431,7 @@ Content-Type：`multipart/form-data`
 成功响应：`DatasetCreateResponse`
 
 常见错误：
+
 - 422：非 UTF-8 或 schema 校验失败（错误信息包含行号）
 
 #### GET /datasets/{dataset_id}
@@ -332,6 +439,7 @@ Content-Type：`multipart/form-data`
 成功响应：`DatasetGetResponse`
 
 常见错误：
+
 - 404：dataset not found
 
 ### 9.3 Runs
@@ -341,9 +449,11 @@ Content-Type：`multipart/form-data`
 Body：JSON（`RunCreateRequest`）
 
 语义：
+
 - dataset-only：`sut` 省略/为 null（后端自动用 dataset adapter）
 
 常见错误（重要）：
+
 - 404：`dataset not found`
 - 422：`eval_type mismatch with dataset`
 - 422：`dataset is not runnable (raw_path missing)`
@@ -366,6 +476,7 @@ Body：JSON（`RunCreateRequest`）
 #### GET /runs/{run_id}/export?format=csv|json|jsonl
 
 导出 run + items：
+
 - `format=json`：返回 `{run, items}`
 - `format=jsonl`：每行一个 item（纯文本返回）
 - `format=csv`：扁平化 CSV，列名为 `metric.<name>.status/score`
@@ -420,4 +531,3 @@ Body：JSON（`RunCreateRequest`）
 - `dataset adapter requires record.trace and/or record.output`：dataset-only 模式下 record 缺少 output/trace；需要重新上传包含 output/trace 的 JSONL。
 - 指标 `skipped`：缺必要字段或缺 provider；前端展示 `details.reason`。
 - run `failed` 且 items 中存在 `record_id="__run__"`：这是“run 级别”错误项，用于展示早期失败原因（数据集读取失败、provider 初始化失败等）。
-

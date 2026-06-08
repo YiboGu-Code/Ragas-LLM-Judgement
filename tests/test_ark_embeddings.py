@@ -24,14 +24,25 @@ def test_ark_multimodal_embeddings_extracts_vector():
 
 def test_ark_provider_ragas_llm_client_is_instructor_patched(monkeypatch):
     from openai import AsyncOpenAI
+    import instructor
 
+    captured = {}
+
+    def fake_from_openai(client, mode):
+        captured["mode"] = mode
+        return object()
+
+    monkeypatch.setattr(instructor, "from_openai", fake_from_openai)
     monkeypatch.setenv("ARK_API_KEY_TEST", "dummy")
+    monkeypatch.setenv("ARK_MODEL", "deepseek-v3-2-251201")
+    monkeypatch.delenv("ARK_INSTRUCTOR_MODE", raising=False)
     p = providers.ArkProvider(api_key_env="ARK_API_KEY_TEST")
     llm = p.get_ragas_llm()
 
     client = getattr(llm, "client", None)
     assert client is not None
     assert not isinstance(client, AsyncOpenAI)
+    assert captured["mode"] == instructor.Mode.TOOLS
 
 
 def test_extract_embedding_vector_supports_object_data():

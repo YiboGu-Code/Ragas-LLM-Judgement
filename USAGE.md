@@ -282,7 +282,7 @@ cat > run_create.json <<'JSON'
     "provider_name": "ark",
     "config": {
       "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-      "model": "doubao-seed-2-0-mini-260428",
+      "model": "deepseek-v3-2-251201",
       "embedding_model": "doubao-embedding-vision-251215"
     }
   },
@@ -307,7 +307,7 @@ curl -X POST http://127.0.0.1:8000/runs \
     "provider_name": "ark",
     "config": {
       "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-      "model": "doubao-seed-2-0-mini-260428",
+      "model": "deepseek-v3-2-251201",
       "embedding_model": "doubao-embedding-vision-251215"
     }
   },

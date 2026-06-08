@@ -3,6 +3,7 @@ import pytest
 import app.metrics.ragas_metrics as ragas_metrics
 from app.metrics.ragas_metrics import (
     RagasAgentGoalAccuracyMetric,
+    RagasAnswerCorrectnessMetric,
     RagasAnswerRelevancyMetric,
     RagasFaithfulnessMetric,
 )
@@ -36,23 +37,28 @@ async def test_ragas_answer_relevancy_ok(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_ragas_faithfulness_ok(monkeypatch):
+async def test_ragas_faithfulness_ok():
+    metric = RagasFaithfulnessMetric()
+    record = {"type": "rag", "input": {"question": "q"}}
+    trace = {"retrieval": {"contexts": ["abc"]}, "output": {"answer": "abc"}}
+    res = await metric.evaluate(record=record, trace=trace, provider=None)
+    assert res.status == "ok"
+    assert res.score == 1.0
+
+
+@pytest.mark.anyio
+async def test_ragas_answer_correctness_short_circuits_when_reference_equals_answer(monkeypatch):
     async def fake_score_single_turn(*, ragas_metric, sample, llm, embeddings):
-        assert sample["user_input"] == "q"
-        assert sample["response"] == "a"
-        assert sample["retrieved_contexts"] == ["c1"]
-        assert llm is not None
-        assert embeddings is None
-        return 0.9
+        raise AssertionError("_score_single_turn should not be called when reference == answer")
 
     monkeypatch.setattr(ragas_metrics, "_score_single_turn", fake_score_single_turn)
 
-    metric = RagasFaithfulnessMetric()
-    record = {"type": "rag", "input": {"question": "q"}}
-    trace = {"retrieval": {"contexts": ["c1"]}, "output": {"answer": "a"}}
+    metric = RagasAnswerCorrectnessMetric()
+    record = {"type": "prompt", "input": {"user_input": "q"}, "expected": {"reference": "a"}}
+    trace = {"output": {"answer": "a"}}
     res = await metric.evaluate(record=record, trace=trace, provider=FullProvider())
     assert res.status == "ok"
-    assert res.score == 0.9
+    assert res.score == 1.0
 
 
 @pytest.mark.anyio
@@ -75,3 +81,20 @@ async def test_ragas_agent_goal_accuracy_ok(monkeypatch):
     res = await metric.evaluate(record=record, trace=trace, provider=FullProvider())
     assert res.status == "ok"
     assert res.score == 1.0
+
+
+@pytest.mark.anyio
+async def test_ragas_metrics_truncate_long_text(monkeypatch):
+    async def fake_score_single_turn(*, ragas_metric, sample, llm, embeddings):
+        assert len(sample["user_input"]) == ragas_metrics._MAX_TEXT_CHARS
+        assert len(sample["response"]) == ragas_metrics._MAX_TEXT_CHARS
+        return 0.5
+
+    monkeypatch.setattr(ragas_metrics, "_score_single_turn", fake_score_single_turn)
+
+    metric = RagasAnswerRelevancyMetric()
+    record = {"type": "prompt", "input": {"user_input": "q" * (ragas_metrics._MAX_TEXT_CHARS + 10)}}
+    trace = {"output": {"answer": "a" * (ragas_metrics._MAX_TEXT_CHARS + 10)}}
+    res = await metric.evaluate(record=record, trace=trace, provider=FullProvider())
+    assert res.status == "ok"
+    assert res.score == 0.5

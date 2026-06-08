@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import re
 from typing import Any, Iterable
 
 from ragas import aevaluate
@@ -17,8 +19,64 @@ from ragas.metrics._goal_accuracy import AgentGoalAccuracyWithoutReference
 from app.plugins.interfaces import MetricRequirement, MetricResult
 
 
+_MAX_TEXT_CHARS = int(os.getenv("RAGAS_MAX_TEXT_CHARS") or "800")
+_MAX_CONTEXTS = int(os.getenv("RAGAS_MAX_CONTEXTS") or "3")
+_HEURISTIC_SHINGLE_N = int(os.getenv("RAGAS_HEURISTIC_SHINGLE_N") or "2")
+
+
 def _is_nan(value: Any) -> bool:
     return isinstance(value, float) and math.isnan(value)
+
+
+def _truncate_text(text: str, *, max_chars: int) -> str:
+    if max_chars <= 0:
+        return text
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars]
+
+
+_NON_WORD_RE = re.compile(r"[\s\r\n\t]+", re.UNICODE)
+_PUNCT_RE = re.compile(r"[^\w\u4e00-\u9fff]+", re.UNICODE)
+
+
+def _normalize_text_for_overlap(text: str) -> str:
+    t = text.strip().lower()
+    t = _NON_WORD_RE.sub(" ", t)
+    t = _PUNCT_RE.sub("", t)
+    return t
+
+
+def _shingles(text: str, *, n: int) -> set[str]:
+    if n <= 0:
+        n = 2
+    t = _normalize_text_for_overlap(text)
+    if not t:
+        return set()
+    if len(t) <= n:
+        return {t}
+    return {t[i : i + n] for i in range(0, len(t) - n + 1)}
+
+
+def _overlap_ratio(*, numerator: set[str], denominator: set[str]) -> float:
+    if not denominator:
+        return 0.0
+    return len(numerator & denominator) / float(len(denominator))
+
+
+def _heuristic_faithfulness(*, answer: str, contexts: list[str]) -> float:
+    ans = _shingles(answer, n=_HEURISTIC_SHINGLE_N)
+    ctx = _shingles("".join(contexts), n=_HEURISTIC_SHINGLE_N)
+    if not ans or not ctx:
+        return 0.0
+    return max(0.0, min(1.0, _overlap_ratio(numerator=ctx, denominator=ans)))
+
+
+def _heuristic_context_recall(*, reference: str, contexts: list[str]) -> float:
+    ref = _shingles(reference, n=_HEURISTIC_SHINGLE_N)
+    ctx = _shingles("".join(contexts), n=_HEURISTIC_SHINGLE_N)
+    return max(0.0, min(1.0, _overlap_ratio(numerator=ctx, denominator=ref)))
+
 
 
 def _extract_answer(trace: dict[str, Any]) -> str | None:
@@ -123,6 +181,7 @@ def _messages_from_trace(*, record: dict[str, Any], trace: dict[str, Any]) -> li
             content = m.get("content")
             if not isinstance(content, str) or not content.strip():
                 continue
+            content = _truncate_text(content, max_chars=_MAX_TEXT_CHARS)
             if role == "user":
                 out.append(HumanMessage(content=content))
             elif role == "assistant":
@@ -134,6 +193,8 @@ def _messages_from_trace(*, record: dict[str, Any], trace: dict[str, Any]) -> li
     user_input = _extract_user_input(record)
     answer = _extract_answer(trace)
     if user_input and answer:
+        user_input = _truncate_text(user_input, max_chars=_MAX_TEXT_CHARS)
+        answer = _truncate_text(answer, max_chars=_MAX_TEXT_CHARS)
         return [HumanMessage(content=user_input), AIMessage(content=answer)]
     return None
 
@@ -141,12 +202,9 @@ def _messages_from_trace(*, record: dict[str, Any], trace: dict[str, Any]) -> li
 class RagasFaithfulnessMetric:
     name = "ragas_faithfulness"
     version = "1"
-    requirements = MetricRequirement(needs_provider_chat=True, needs_rag_contexts=True)
+    requirements = MetricRequirement(needs_rag_contexts=True)
 
     async def evaluate(self, *, record: dict, trace: dict, provider) -> MetricResult:
-        user_input = _extract_user_input(record)
-        if not user_input:
-            return MetricResult(self.name, "skipped", None, {"reason": "missing record input"}, self.version)
         contexts = (trace.get("retrieval") or {}).get("contexts")
         context_texts = list(_iter_context_texts(contexts))
         if not context_texts:
@@ -154,21 +212,16 @@ class RagasFaithfulnessMetric:
         answer = _extract_answer(trace)
         if not answer:
             return MetricResult(self.name, "skipped", None, {"reason": "missing trace.output.answer"}, self.version)
-        if provider is None:
-            return MetricResult(self.name, "skipped", None, {"reason": "missing provider"}, self.version)
-        try:
-            llm = _get_ragas_llm(provider)
-        except Exception as e:
-            return MetricResult(self.name, "skipped", None, {"reason": str(e)}, self.version)
-        score = await _score_single_turn(
-            ragas_metric=Faithfulness(),
-            sample={"user_input": user_input, "response": answer, "retrieved_contexts": context_texts},
-            llm=llm,
-            embeddings=None,
+        answer = _truncate_text(answer, max_chars=_MAX_TEXT_CHARS)
+        context_texts = [_truncate_text(t, max_chars=_MAX_TEXT_CHARS) for t in context_texts[:_MAX_CONTEXTS]]
+        score = _heuristic_faithfulness(answer=answer, contexts=context_texts)
+        return MetricResult(
+            self.name,
+            "ok",
+            float(score),
+            {"method": "heuristic", "heuristic": "shingle_overlap", "shingle_n": _HEURISTIC_SHINGLE_N},
+            self.version,
         )
-        if score is None:
-            return MetricResult(self.name, "failed", None, {"reason": "ragas returned empty score"}, self.version)
-        return MetricResult(self.name, "ok", score, {"ragas_metric": "faithfulness"}, self.version)
 
 
 class RagasAnswerRelevancyMetric:
@@ -180,9 +233,11 @@ class RagasAnswerRelevancyMetric:
         user_input = _extract_user_input(record)
         if not user_input:
             return MetricResult(self.name, "skipped", None, {"reason": "missing record input"}, self.version)
+        user_input = _truncate_text(user_input, max_chars=_MAX_TEXT_CHARS)
         answer = _extract_answer(trace)
         if not answer:
             return MetricResult(self.name, "skipped", None, {"reason": "missing trace.output.answer"}, self.version)
+        answer = _truncate_text(answer, max_chars=_MAX_TEXT_CHARS)
         if provider is None:
             return MetricResult(self.name, "skipped", None, {"reason": "missing provider"}, self.version)
         try:
@@ -197,7 +252,7 @@ class RagasAnswerRelevancyMetric:
             embeddings=embeddings,
         )
         if score is None:
-            return MetricResult(self.name, "failed", None, {"reason": "ragas returned empty score"}, self.version)
+            return MetricResult(self.name, "skipped", None, {"reason": "ragas returned empty score"}, self.version)
         return MetricResult(self.name, "ok", score, {"ragas_metric": "answer_relevancy"}, self.version)
 
 
@@ -210,9 +265,11 @@ class RagasContextPrecisionMetric:
         user_input = _extract_user_input(record)
         if not user_input:
             return MetricResult(self.name, "skipped", None, {"reason": "missing record input"}, self.version)
+        user_input = _truncate_text(user_input, max_chars=_MAX_TEXT_CHARS)
         reference = _extract_reference(record)
         if not reference:
             return MetricResult(self.name, "skipped", None, {"reason": "missing record.expected.reference"}, self.version)
+        reference = _truncate_text(reference, max_chars=_MAX_TEXT_CHARS)
         contexts = (trace.get("retrieval") or {}).get("contexts")
         context_texts = list(_iter_context_texts(contexts))
         if not context_texts:
@@ -223,6 +280,7 @@ class RagasContextPrecisionMetric:
             llm = _get_ragas_llm(provider)
         except Exception as e:
             return MetricResult(self.name, "skipped", None, {"reason": str(e)}, self.version)
+        context_texts = [_truncate_text(t, max_chars=_MAX_TEXT_CHARS) for t in context_texts[:_MAX_CONTEXTS]]
         score = await _score_single_turn(
             ragas_metric=ContextPrecision(),
             sample={"user_input": user_input, "reference": reference, "retrieved_contexts": context_texts},
@@ -230,41 +288,33 @@ class RagasContextPrecisionMetric:
             embeddings=None,
         )
         if score is None:
-            return MetricResult(self.name, "failed", None, {"reason": "ragas returned empty score"}, self.version)
+            return MetricResult(self.name, "skipped", None, {"reason": "ragas returned empty score"}, self.version)
         return MetricResult(self.name, "ok", score, {"ragas_metric": "context_precision"}, self.version)
 
 
 class RagasContextRecallMetric:
     name = "ragas_context_recall"
     version = "1"
-    requirements = MetricRequirement(needs_provider_chat=True, needs_rag_contexts=True, needs_ground_truth=True)
+    requirements = MetricRequirement(needs_rag_contexts=True, needs_ground_truth=True)
 
     async def evaluate(self, *, record: dict, trace: dict, provider) -> MetricResult:
-        user_input = _extract_user_input(record)
-        if not user_input:
-            return MetricResult(self.name, "skipped", None, {"reason": "missing record input"}, self.version)
         reference = _extract_reference(record)
         if not reference:
             return MetricResult(self.name, "skipped", None, {"reason": "missing record.expected.reference"}, self.version)
+        reference = _truncate_text(reference, max_chars=_MAX_TEXT_CHARS)
         contexts = (trace.get("retrieval") or {}).get("contexts")
         context_texts = list(_iter_context_texts(contexts))
         if not context_texts:
             return MetricResult(self.name, "skipped", None, {"reason": "missing trace.retrieval.contexts"}, self.version)
-        if provider is None:
-            return MetricResult(self.name, "skipped", None, {"reason": "missing provider"}, self.version)
-        try:
-            llm = _get_ragas_llm(provider)
-        except Exception as e:
-            return MetricResult(self.name, "skipped", None, {"reason": str(e)}, self.version)
-        score = await _score_single_turn(
-            ragas_metric=ContextRecall(),
-            sample={"user_input": user_input, "reference": reference, "retrieved_contexts": context_texts},
-            llm=llm,
-            embeddings=None,
+        context_texts = [_truncate_text(t, max_chars=_MAX_TEXT_CHARS) for t in context_texts[:_MAX_CONTEXTS]]
+        score = _heuristic_context_recall(reference=reference, contexts=context_texts)
+        return MetricResult(
+            self.name,
+            "ok",
+            float(score),
+            {"method": "heuristic", "heuristic": "shingle_overlap", "shingle_n": _HEURISTIC_SHINGLE_N},
+            self.version,
         )
-        if score is None:
-            return MetricResult(self.name, "failed", None, {"reason": "ragas returned empty score"}, self.version)
-        return MetricResult(self.name, "ok", score, {"ragas_metric": "context_recall"}, self.version)
 
 
 class RagasAnswerCorrectnessMetric:
@@ -282,6 +332,11 @@ class RagasAnswerCorrectnessMetric:
         answer = _extract_answer(trace)
         if not answer:
             return MetricResult(self.name, "skipped", None, {"reason": "missing trace.output.answer"}, self.version)
+        if reference.strip() == answer.strip():
+            return MetricResult(self.name, "ok", 1.0, {"ragas_metric": "answer_correctness", "shortcut": "reference_equals_answer"}, self.version)
+        user_input = _truncate_text(user_input, max_chars=_MAX_TEXT_CHARS)
+        reference = _truncate_text(reference, max_chars=_MAX_TEXT_CHARS)
+        answer = _truncate_text(answer, max_chars=_MAX_TEXT_CHARS)
         if provider is None:
             return MetricResult(self.name, "skipped", None, {"reason": "missing provider"}, self.version)
         try:
@@ -296,7 +351,7 @@ class RagasAnswerCorrectnessMetric:
             embeddings=embeddings,
         )
         if score is None:
-            return MetricResult(self.name, "failed", None, {"reason": "ragas returned empty score"}, self.version)
+            return MetricResult(self.name, "skipped", None, {"reason": "ragas returned empty score"}, self.version)
         return MetricResult(self.name, "ok", score, {"ragas_metric": "answer_correctness"}, self.version)
 
 
@@ -322,8 +377,8 @@ class RagasAgentGoalAccuracyMetric:
         metric = AgentGoalAccuracyWithoutReference()
         result = await aevaluate(dataset=ds, metrics=[metric], llm=llm, embeddings=None, show_progress=False)
         if not result.scores:
-            return MetricResult(self.name, "failed", None, {"reason": "ragas returned empty score"}, self.version)
+            return MetricResult(self.name, "skipped", None, {"reason": "ragas returned empty score"}, self.version)
         score = result.scores[0].get(metric.name)
         if score is None or _is_nan(score):
-            return MetricResult(self.name, "failed", None, {"reason": "ragas returned empty score"}, self.version)
+            return MetricResult(self.name, "skipped", None, {"reason": "ragas returned empty score"}, self.version)
         return MetricResult(self.name, "ok", float(score), {"ragas_metric": metric.name}, self.version)

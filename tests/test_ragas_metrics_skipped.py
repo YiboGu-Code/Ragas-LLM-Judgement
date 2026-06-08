@@ -11,12 +11,14 @@ class LlmOnlyProvider:
 
 
 @pytest.mark.anyio
-async def test_ragas_faithfulness_skipped_without_provider():
+async def test_ragas_faithfulness_ok_without_provider():
     metric = RagasFaithfulnessMetric()
     record = {"type": "rag", "input": {"question": "q"}}
     trace = {"retrieval": {"contexts": ["c1"]}, "output": {"answer": "a"}}
     res = await metric.evaluate(record=record, trace=trace, provider=None)
-    assert res.status == "skipped"
+    assert res.status == "ok"
+    assert res.score is not None
+    assert 0.0 <= res.score <= 1.0
 
 
 @pytest.mark.anyio
