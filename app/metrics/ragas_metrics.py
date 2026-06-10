@@ -160,6 +160,16 @@ def _get_ragas_embeddings(provider: Any):
 
 async def _score_single_turn(*, ragas_metric: Any, sample: dict[str, Any], llm: Any, embeddings: Any | None) -> float | None:
     ds = EvaluationDataset.from_list([sample])
+    if llm is not None and getattr(ragas_metric, "llm", None) is None:
+        try:
+            setattr(ragas_metric, "llm", llm)
+        except Exception:
+            pass
+    if embeddings is not None and getattr(ragas_metric, "embeddings", None) is None:
+        try:
+            setattr(ragas_metric, "embeddings", embeddings)
+        except Exception:
+            pass
     result = await aevaluate(dataset=ds, metrics=[ragas_metric], llm=llm, embeddings=embeddings, show_progress=False)
     if not result.scores:
         return None

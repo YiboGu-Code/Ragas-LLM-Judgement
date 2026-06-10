@@ -18,6 +18,39 @@ class FullProvider:
 
 
 @pytest.mark.anyio
+async def test_score_single_turn_sets_metric_llm_and_embeddings(monkeypatch):
+    class DummyResult:
+        def __init__(self, scores):
+            self.scores = scores
+
+    class DummyMetric:
+        name = "answer_relevancy"
+
+        def __init__(self):
+            self.llm = None
+            self.embeddings = None
+
+    async def fake_aevaluate(*, dataset, metrics, llm, embeddings, show_progress):
+        assert dataset is not None
+        assert llm is not None
+        assert embeddings is not None
+        assert len(metrics) == 1
+        assert metrics[0].llm is llm
+        assert metrics[0].embeddings is embeddings
+        return DummyResult(scores=[{metrics[0].name: 0.1}])
+
+    monkeypatch.setattr(ragas_metrics, "aevaluate", fake_aevaluate)
+
+    score = await ragas_metrics._score_single_turn(
+        ragas_metric=DummyMetric(),
+        sample={"user_input": "q", "response": "a"},
+        llm=object(),
+        embeddings=object(),
+    )
+    assert score == 0.1
+
+
+@pytest.mark.anyio
 async def test_ragas_answer_relevancy_ok(monkeypatch):
     async def fake_score_single_turn(*, ragas_metric, sample, llm, embeddings):
         assert sample["user_input"] == "q"
