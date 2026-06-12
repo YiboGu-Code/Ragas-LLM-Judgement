@@ -9,8 +9,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - backend_data:/app/data
-      - backend_artifacts:/app/artifacts
+      - ./data:/app/data
+      - ./artifacts:/app/artifacts
     restart: unless-stopped
 
   frontend:
@@ -23,7 +23,3 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
-
-volumes:
-  backend_data:
-  backend_artifacts:
