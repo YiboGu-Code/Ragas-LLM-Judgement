@@ -18,10 +18,36 @@ from app.datasets.validator import validate_jsonl_lines
 from app.artifacts.store import save_trace_artifact
 from app.db.models import Artifact, Dataset, Run, RunItem
 from app.execution.engine import RunEngine
-from app.schemas.runs import RunCreateRequest, RunCreateResponse, RunGetResponse, RunItemsResponse
+from app.schemas.runs import RunCreateRequest, RunCreateResponse, RunGetResponse, RunItemsResponse, RunListResponse
 
 
 router = APIRouter()
+
+
+@router.get("/runs", response_model=RunListResponse)
+def list_runs(request: Request):
+    SessionLocal = request.app.state.SessionLocal
+    with SessionLocal() as session:
+        rows = session.query(Run).order_by(Run.created_at.desc(), Run.id.desc()).all()
+        return RunListResponse(
+            items=[
+                {
+                    "run_id": run.id,
+                    "dataset_id": run.dataset_id,
+                    "eval_type": run.eval_type,
+                    "status": run.status,
+                    "progress": {
+                        "total": run.progress_total,
+                        "completed": run.progress_completed,
+                        "failed": run.progress_failed,
+                    },
+                    "created_at": run.created_at,
+                    "started_at": run.started_at,
+                    "finished_at": run.finished_at,
+                }
+                for run in rows
+            ]
+        )
 
 
 def _provider_config_contains_secrets(config: Any) -> bool:

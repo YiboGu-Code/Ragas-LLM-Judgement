@@ -4,6 +4,7 @@ import type {
   RunCreateResponse,
   RunGetResponse,
   RunItemsResponse,
+  RunListResponse,
 } from "./types";
 
 export async function createRun(
@@ -55,4 +56,8 @@ export async function deleteRun(runId: string): Promise<void> {
   await apiFetch<string>(`/runs/${encodeURIComponent(runId)}`, {
     method: "DELETE",
   });
+}
+
+export async function listRuns(): Promise<RunListResponse> {
+  return apiFetch<RunListResponse>("/runs");
 }

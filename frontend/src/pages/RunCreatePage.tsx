@@ -1,12 +1,13 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type {
   EvalType,
   MetricName,
   ProviderRef,
   RunCreateRequest,
+  RunListResponse,
 } from "../api/types";
-import { createRun } from "../api/runs";
+import { createRun, listRuns } from "../api/runs";
 import { ApiError } from "../api/client";
 import { addRecentRun } from "../storage/recent";
 
@@ -162,6 +163,9 @@ export default function RunCreatePage() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [shared, setShared] = useState<RunListResponse | null>(null);
+  const [loadingShared, setLoadingShared] = useState(false);
+  const [sharedError, setSharedError] = useState<string | null>(null);
 
   const metricOptions = useMemo(
     () => METRICS.filter((m) => m.evalTypes.includes(evalType)),
@@ -170,6 +174,25 @@ export default function RunCreatePage() {
 
   const ragasSelected = anyRagasSelected(selectedMetrics);
   const embeddingRequired = requiresEmbeddingModel(selectedMetrics);
+
+  const loadShared = useCallback(async () => {
+    setLoadingShared(true);
+    setSharedError(null);
+    try {
+      const res = await listRuns();
+      setShared(res);
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : "request failed";
+      setSharedError(message);
+      setShared(null);
+    } finally {
+      setLoadingShared(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadShared();
+  }, [loadShared]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -456,6 +479,61 @@ export default function RunCreatePage() {
         </form>
 
         {error ? <pre className="error">{error}</pre> : null}
+      </div>
+
+      <div className="card">
+        <div className="row">
+          <h2 style={{ margin: 0 }}>共享 Runs</h2>
+          <button
+            className="btn"
+            type="button"
+            onClick={() => void loadShared()}
+            disabled={loadingShared}
+          >
+            {loadingShared ? "Loading..." : "Refresh"}
+          </button>
+        </div>
+        <div className="muted">所有访问者可见（来自后端数据库）</div>
+        {sharedError ? <pre className="error">{sharedError}</pre> : null}
+        {shared ? (
+          <div className="table-wrap" style={{ marginTop: 12 }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>run_id</th>
+                  <th>dataset_id</th>
+                  <th>status</th>
+                  <th>progress</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {shared.items.map((it) => (
+                  <tr key={it.run_id}>
+                    <td>{it.run_id}</td>
+                    <td>{it.dataset_id}</td>
+                    <td>{it.status}</td>
+                    <td>
+                      {it.progress.completed}/{it.progress.total} (failed{" "}
+                      {it.progress.failed})
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <button
+                        className="btn"
+                        type="button"
+                        onClick={() =>
+                          navigate(`/runs/${encodeURIComponent(it.run_id)}`)
+                        }
+                      >
+                        打开
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -7,10 +7,30 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, Response, Upl
 
 from app.datasets.validator import validate_jsonl_lines
 from app.db.models import Dataset, Run
-from app.schemas.datasets import DatasetCreateResponse, DatasetGetResponse
+from app.schemas.datasets import DatasetCreateResponse, DatasetGetResponse, DatasetListResponse
 
 
 router = APIRouter()
+
+
+@router.get("/datasets", response_model=DatasetListResponse)
+def list_datasets(request: Request):
+    SessionLocal = request.app.state.SessionLocal
+    with SessionLocal() as session:
+        rows = session.query(Dataset).order_by(Dataset.created_at.desc(), Dataset.id.desc()).all()
+        return DatasetListResponse(
+            items=[
+                {
+                    "dataset_id": ds.id,
+                    "name": ds.name,
+                    "eval_type": ds.eval_type,
+                    "schema_version": ds.schema_version,
+                    "records_count": ds.records_count,
+                    "created_at": ds.created_at,
+                }
+                for ds in rows
+            ]
+        )
 
 
 @router.post("/datasets", response_model=DatasetCreateResponse)

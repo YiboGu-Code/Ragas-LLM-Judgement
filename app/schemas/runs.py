@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -47,3 +49,18 @@ class RunGetResponse(BaseModel):
 
 class RunItemsResponse(BaseModel):
     items: list[dict]
+
+
+class RunListItem(BaseModel):
+    run_id: str
+    dataset_id: str
+    eval_type: str
+    status: str
+    progress: dict
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+class RunListResponse(BaseModel):
+    items: list[RunListItem]

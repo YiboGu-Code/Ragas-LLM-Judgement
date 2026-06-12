@@ -2,6 +2,7 @@ import { apiFetch } from "./client";
 import type {
   DatasetCreateResponse,
   DatasetGetResponse,
+  DatasetListResponse,
   EvalType,
 } from "./types";
 
@@ -36,4 +37,8 @@ export async function deleteDataset(datasetId: string): Promise<void> {
   await apiFetch<unknown>(`/datasets/${encodeURIComponent(datasetId)}`, {
     method: "DELETE",
   });
+}
+
+export async function listDatasets(): Promise<DatasetListResponse> {
+  return apiFetch<DatasetListResponse>("/datasets");
 }

@@ -1,6 +1,10 @@
-import { useState } from 'react'
-import { uploadDataset } from '../api/datasets'
-import type { DatasetCreateResponse, EvalType } from '../api/types'
+import { useCallback, useEffect, useState } from 'react'
+import { listDatasets, uploadDataset } from '../api/datasets'
+import type {
+  DatasetCreateResponse,
+  DatasetListResponse,
+  EvalType,
+} from '../api/types'
 import { ApiError } from '../api/client'
 import { addRecentDataset } from '../storage/recent'
 import { useNavigate } from 'react-router-dom'
@@ -16,6 +20,28 @@ export default function DatasetsUploadPage() {
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<DatasetCreateResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [shared, setShared] = useState<DatasetListResponse | null>(null)
+  const [loadingShared, setLoadingShared] = useState(false)
+  const [sharedError, setSharedError] = useState<string | null>(null)
+
+  const loadShared = useCallback(async () => {
+    setLoadingShared(true)
+    setSharedError(null)
+    try {
+      const res = await listDatasets()
+      setShared(res)
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : 'request failed'
+      setSharedError(message)
+      setShared(null)
+    } finally {
+      setLoadingShared(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadShared()
+  }, [loadShared])
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -97,6 +123,47 @@ export default function DatasetsUploadPage() {
             </a>
           ))}
         </div>
+      </div>
+
+      <div className="card">
+        <div className="row">
+          <h2 style={{ margin: 0 }}>共享 Datasets</h2>
+          <button className="btn" type="button" onClick={() => void loadShared()} disabled={loadingShared}>
+            {loadingShared ? 'Loading...' : 'Refresh'}
+          </button>
+        </div>
+        <div className="muted">所有访问者可见（来自后端数据库）</div>
+        {sharedError ? <pre className="error">{sharedError}</pre> : null}
+        {shared ? (
+          <div className="table-wrap" style={{ marginTop: 12 }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>name</th>
+                  <th>eval_type</th>
+                  <th>records</th>
+                  <th>dataset_id</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {shared.items.map((it) => (
+                  <tr key={it.dataset_id}>
+                    <td>{it.name ?? '-'}</td>
+                    <td>{it.eval_type}</td>
+                    <td>{it.records_count}</td>
+                    <td>{it.dataset_id}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="btn" type="button" onClick={() => navigate(`/datasets/${encodeURIComponent(it.dataset_id)}`)}>
+                        打开
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </div>
 
       <div className="card">

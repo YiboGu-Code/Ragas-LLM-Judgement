@@ -83,6 +83,79 @@ def test_create_and_run(tmp_path, monkeypatch):
     assert body["run"]["run_id"] == run_id
 
 
+def test_list_runs_returns_shared_runs_with_status(tmp_path, monkeypatch):
+    monkeypatch.setenv("APP_SQLITE_PATH", str(tmp_path / "app.db"))
+    monkeypatch.setenv("APP_DATASET_DIR", str(tmp_path / "datasets"))
+
+    app = create_app()
+
+    class DummyAdapter:
+        name = "dummy"
+
+        async def execute(self, *, record, provider):
+            return {"output": {"final": record["input"]["user_input"]}, "trace": {"messages": []}}
+
+    class DummyMetric:
+        name = "dummy_metric"
+        version = "1"
+        requirements = type("Req", (), {})()
+
+        async def evaluate(self, *, record, trace, provider):
+            return type(
+                "MetricResultObj",
+                (),
+                {"__dict__": {"name": self.name, "status": "ok", "score": 1.0, "details": {}, "version": self.version}},
+            )()
+
+    app.state.registry.register_sut_adapter(DummyAdapter)
+    app.state.registry.register_metric(DummyMetric)
+
+    client = TestClient(app)
+
+    ds_resp = client.post(
+        "/datasets",
+        files={"file": ("ds.jsonl", b'{"type":"prompt","input":{"user_input":"hi"}}\n', "application/jsonl")},
+        data={"name": "shared-dataset", "eval_type": "prompt"},
+    )
+    assert ds_resp.status_code == 200, ds_resp.text
+    dataset_id = ds_resp.json()["dataset_id"]
+
+    run_resp = client.post(
+        "/runs",
+        json={
+            "dataset_id": dataset_id,
+            "eval_type": "prompt",
+            "sut": {"adapter_name": "dummy", "adapter_config": {}},
+            "metrics": [{"metric_name": "dummy_metric", "metric_config": {}}],
+            "provider_ref": {"provider_name": "manual", "config": {}},
+            "execution": {"max_concurrency": 1, "timeout_seconds": 5, "save_artifacts": False},
+        },
+    )
+    assert run_resp.status_code == 200, run_resp.text
+    run_id = run_resp.json()["run_id"]
+
+    start_resp = client.post(f"/runs/{run_id}/start")
+    assert start_resp.status_code == 200, start_resp.text
+
+    for _ in range(100):
+        run = client.get(f"/runs/{run_id}").json()
+        if run["status"] in ("succeeded", "failed"):
+            break
+        time.sleep(0.01)
+    assert run["status"] == "succeeded"
+
+    list_resp = client.get("/runs")
+    assert list_resp.status_code == 200, list_resp.text
+
+    body = list_resp.json()
+    assert len(body["items"]) == 1
+    assert body["items"][0]["run_id"] == run_id
+    assert body["items"][0]["dataset_id"] == dataset_id
+    assert body["items"][0]["status"] == "succeeded"
+    assert body["items"][0]["progress"]["total"] == 1
+    assert body["items"][0]["created_at"]
+
+
 def test_create_run_without_sut_defaults_to_dataset_adapter(tmp_path, monkeypatch):
     monkeypatch.setenv("APP_SQLITE_PATH", str(tmp_path / "app.db"))
     monkeypatch.setenv("APP_DATASET_DIR", str(tmp_path / "datasets"))

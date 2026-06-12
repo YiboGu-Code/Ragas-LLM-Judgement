@@ -16,6 +16,19 @@ export type DatasetGetResponse = {
   raw_path: string | null;
 };
 
+export type DatasetListItem = {
+  dataset_id: string;
+  name: string | null;
+  eval_type: EvalType;
+  schema_version: string;
+  records_count: number;
+  created_at: string;
+};
+
+export type DatasetListResponse = {
+  items: DatasetListItem[];
+};
+
 export type MetricName =
   | "rag_contexts_present"
   | "ragas_faithfulness"
@@ -61,6 +74,21 @@ export type RunGetResponse = {
     | "failed"
     | "canceled";
   progress: { total: number; completed: number; failed: number };
+};
+
+export type RunListItem = {
+  run_id: string;
+  dataset_id: string;
+  eval_type: EvalType;
+  status: string;
+  progress: { total: number; completed: number; failed: number };
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+};
+
+export type RunListResponse = {
+  items: RunListItem[];
 };
 
 export type MetricResult = {
