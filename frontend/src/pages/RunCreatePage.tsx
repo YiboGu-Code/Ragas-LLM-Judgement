@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type {
+  BulkDeleteResponse,
   EvalType,
   MetricName,
   ProviderRef,
   RunCreateRequest,
   RunListResponse,
 } from "../api/types";
-import { createRun, listRuns } from "../api/runs";
+import { bulkDeleteRuns, createRun, deleteRun, listRuns } from "../api/runs";
 import { ApiError } from "../api/client";
 import { addRecentRun } from "../storage/recent";
 
@@ -166,6 +167,10 @@ export default function RunCreatePage() {
   const [shared, setShared] = useState<RunListResponse | null>(null);
   const [loadingShared, setLoadingShared] = useState(false);
   const [sharedError, setSharedError] = useState<string | null>(null);
+  const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
+  const [deletingShared, setDeletingShared] = useState(false);
+  const [bulkDeleteResult, setBulkDeleteResult] =
+    useState<BulkDeleteResponse | null>(null);
 
   const metricOptions = useMemo(
     () => METRICS.filter((m) => m.evalTypes.includes(evalType)),
@@ -193,6 +198,68 @@ export default function RunCreatePage() {
   useEffect(() => {
     void loadShared();
   }, [loadShared]);
+
+  const selectedSet = useMemo(() => new Set(selectedRunIds), [selectedRunIds]);
+  const allSelected = useMemo(() => {
+    if (!shared || shared.items.length === 0) return false;
+    return shared.items.every((x) => selectedSet.has(x.run_id));
+  }, [selectedSet, shared]);
+
+  function toggleSelected(id: string) {
+    setSelectedRunIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  function toggleAll() {
+    if (!shared) return;
+    if (allSelected) {
+      setSelectedRunIds([]);
+      return;
+    }
+    setSelectedRunIds(shared.items.map((x) => x.run_id));
+  }
+
+  async function onDeleteOne(runId: string) {
+    if (!window.confirm(`确认删除 run：${runId}？此操作不可恢复。`)) return;
+    setSharedError(null);
+    setBulkDeleteResult(null);
+    setDeletingShared(true);
+    try {
+      await deleteRun(runId);
+      setSelectedRunIds((prev) => prev.filter((x) => x !== runId));
+      await loadShared();
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : "delete failed";
+      setSharedError(message);
+    } finally {
+      setDeletingShared(false);
+    }
+  }
+
+  async function onBulkDelete() {
+    const ids = selectedRunIds;
+    if (ids.length === 0) return;
+    if (!window.confirm(`确认批量删除 ${ids.length} 个 run？此操作不可恢复。`))
+      return;
+    setSharedError(null);
+    setBulkDeleteResult(null);
+    setDeletingShared(true);
+    try {
+      const res = await bulkDeleteRuns(ids);
+      setBulkDeleteResult(res);
+      const deleted = new Set(
+        res.results.filter((x) => x.status === "deleted").map((x) => x.id),
+      );
+      setSelectedRunIds((prev) => prev.filter((x) => !deleted.has(x)));
+      await loadShared();
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : "bulk delete failed";
+      setSharedError(message);
+    } finally {
+      setDeletingShared(false);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -492,24 +559,53 @@ export default function RunCreatePage() {
           >
             {loadingShared ? "Loading..." : "Refresh"}
           </button>
+          <button
+            className="btn"
+            type="button"
+            onClick={() => void onBulkDelete()}
+            disabled={deletingShared || selectedRunIds.length === 0}
+          >
+            {deletingShared
+              ? "Deleting..."
+              : `批量删除（${selectedRunIds.length}）`}
+          </button>
         </div>
         <div className="muted">所有访问者可见（来自后端数据库）</div>
         {sharedError ? <pre className="error">{sharedError}</pre> : null}
+        {bulkDeleteResult ? (
+          <pre className="code">
+            {JSON.stringify(bulkDeleteResult, null, 2)}
+          </pre>
+        ) : null}
         {shared ? (
           <div className="table-wrap" style={{ marginTop: 12 }}>
             <table className="table">
               <thead>
                 <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                    />
+                  </th>
                   <th>run_id</th>
                   <th>dataset_id</th>
                   <th>status</th>
                   <th>progress</th>
-                  <th />
+                  <th>actions</th>
                 </tr>
               </thead>
               <tbody>
                 {shared.items.map((it) => (
                   <tr key={it.run_id}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedSet.has(it.run_id)}
+                        onChange={() => toggleSelected(it.run_id)}
+                      />
+                    </td>
                     <td>{it.run_id}</td>
                     <td>{it.dataset_id}</td>
                     <td>{it.status}</td>
@@ -524,8 +620,17 @@ export default function RunCreatePage() {
                         onClick={() =>
                           navigate(`/runs/${encodeURIComponent(it.run_id)}`)
                         }
+                        disabled={deletingShared}
                       >
                         打开
+                      </button>
+                      <button
+                        className="btn"
+                        type="button"
+                        onClick={() => void onDeleteOne(it.run_id)}
+                        disabled={deletingShared}
+                      >
+                        删除
                       </button>
                     </td>
                   </tr>

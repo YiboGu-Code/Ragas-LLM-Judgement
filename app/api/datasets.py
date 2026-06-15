@@ -7,7 +7,13 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, Response, Upl
 
 from app.datasets.validator import validate_jsonl_lines
 from app.db.models import Dataset, Run
-from app.schemas.datasets import DatasetCreateResponse, DatasetGetResponse, DatasetListResponse
+from app.schemas.datasets import (
+    DatasetBulkDeleteRequest,
+    DatasetBulkDeleteResponse,
+    DatasetCreateResponse,
+    DatasetGetResponse,
+    DatasetListResponse,
+)
 
 
 router = APIRouter()
@@ -123,3 +129,43 @@ def delete_dataset(request: Request, dataset_id: str):
         session.commit()
 
     return Response(status_code=204)
+
+
+@router.post("/datasets/bulk-delete", response_model=DatasetBulkDeleteResponse)
+def bulk_delete_datasets(request: Request, payload: DatasetBulkDeleteRequest):
+    SessionLocal = request.app.state.SessionLocal
+    results: list[dict] = []
+
+    with SessionLocal() as session:
+        for dataset_id in payload.dataset_ids:
+            ds = session.get(Dataset, dataset_id)
+            if ds is None:
+                results.append({"id": dataset_id, "status": "not_found", "detail": "dataset not found"})
+                continue
+
+            existing_run = session.query(Run).filter(Run.dataset_id == dataset_id).first()
+            if existing_run is not None:
+                results.append(
+                    {
+                        "id": dataset_id,
+                        "status": "blocked",
+                        "detail": "dataset is referenced by runs; delete runs first",
+                    }
+                )
+                continue
+
+            try:
+                if ds.raw_path:
+                    try:
+                        Path(ds.raw_path).unlink(missing_ok=True)
+                    except Exception:
+                        pass
+
+                session.delete(ds)
+                session.commit()
+                results.append({"id": dataset_id, "status": "deleted", "detail": None})
+            except Exception as e:
+                session.rollback()
+                results.append({"id": dataset_id, "status": "error", "detail": str(e)})
+
+    return DatasetBulkDeleteResponse(results=results)

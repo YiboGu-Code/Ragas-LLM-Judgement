@@ -29,6 +29,22 @@ export type DatasetListResponse = {
   items: DatasetListItem[];
 };
 
+export type BulkDeleteResultStatus =
+  | "deleted"
+  | "not_found"
+  | "blocked"
+  | "error";
+
+export type BulkDeleteResult = {
+  id: string;
+  status: BulkDeleteResultStatus;
+  detail: string | null;
+};
+
+export type BulkDeleteResponse = {
+  results: BulkDeleteResult[];
+};
+
 export type MetricName =
   | "rag_contexts_present"
   | "ragas_faithfulness"

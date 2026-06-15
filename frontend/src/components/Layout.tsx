@@ -1,6 +1,11 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { getRecentDatasets, getRecentRuns } from "../storage/recent";
-import { useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import {
+  clearRecentDatasets,
+  clearRecentRuns,
+  getRecentDatasets,
+  getRecentRuns,
+} from "../storage/recent";
+import { useEffect, useState } from "react";
 
 function NavItem(props: { to: string; label: string }) {
   return (
@@ -17,10 +22,18 @@ function NavItem(props: { to: string; label: string }) {
 
 export default function Layout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [openDatasetId, setOpenDatasetId] = useState("");
   const [openRunId, setOpenRunId] = useState("");
-  const recentDatasets = getRecentDatasets();
-  const recentRuns = getRecentRuns();
+  const [recentDatasets, setRecentDatasets] = useState<string[]>(
+    getRecentDatasets(),
+  );
+  const [recentRuns, setRecentRuns] = useState<string[]>(getRecentRuns());
+
+  useEffect(() => {
+    setRecentDatasets(getRecentDatasets());
+    setRecentRuns(getRecentRuns());
+  }, [location.pathname]);
 
   return (
     <div className="app-shell">
@@ -36,7 +49,24 @@ export default function Layout() {
         </div>
 
         <div className="nav-section">
-          <div className="nav-section-title">最近 Datasets</div>
+          <div className="row">
+            <div className="nav-section-title" style={{ margin: 0 }}>
+              最近 Datasets
+            </div>
+            <button
+              className="btn"
+              type="button"
+              style={{ marginLeft: "auto" }}
+              onClick={() => {
+                if (!window.confirm("确认清空最近 Datasets？")) return;
+                clearRecentDatasets();
+                setRecentDatasets([]);
+              }}
+              disabled={recentDatasets.length === 0}
+            >
+              清空
+            </button>
+          </div>
           <div className="recent-list">
             {recentDatasets.length === 0 ? (
               <div className="muted">暂无</div>
@@ -77,7 +107,24 @@ export default function Layout() {
         </div>
 
         <div className="nav-section">
-          <div className="nav-section-title">最近 Runs</div>
+          <div className="row">
+            <div className="nav-section-title" style={{ margin: 0 }}>
+              最近 Runs
+            </div>
+            <button
+              className="btn"
+              type="button"
+              style={{ marginLeft: "auto" }}
+              onClick={() => {
+                if (!window.confirm("确认清空最近 Runs？")) return;
+                clearRecentRuns();
+                setRecentRuns([]);
+              }}
+              disabled={recentRuns.length === 0}
+            >
+              清空
+            </button>
+          </div>
           <div className="recent-list">
             {recentRuns.length === 0 ? (
               <div className="muted">暂无</div>

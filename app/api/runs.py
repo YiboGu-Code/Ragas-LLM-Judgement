@@ -18,7 +18,15 @@ from app.datasets.validator import validate_jsonl_lines
 from app.artifacts.store import save_trace_artifact
 from app.db.models import Artifact, Dataset, Run, RunItem
 from app.execution.engine import RunEngine
-from app.schemas.runs import RunCreateRequest, RunCreateResponse, RunGetResponse, RunItemsResponse, RunListResponse
+from app.schemas.runs import (
+    RunBulkDeleteRequest,
+    RunBulkDeleteResponse,
+    RunCreateRequest,
+    RunCreateResponse,
+    RunGetResponse,
+    RunItemsResponse,
+    RunListResponse,
+)
 
 
 router = APIRouter()
@@ -469,19 +477,50 @@ def delete_run(request: Request, run_id: str):
             raise HTTPException(status_code=404, detail="run not found")
         if run.status in ("running", "queued"):
             raise HTTPException(status_code=409, detail="run is running; cancel before delete")
-
-        artifacts = session.query(Artifact).filter(Artifact.run_id == run_id).all()
-        for a in artifacts:
-            try:
-                Path(a.path).unlink(missing_ok=True)
-            except Exception:
-                pass
-
-        shutil.rmtree(Path(settings.artifact_dir) / run_id, ignore_errors=True)
-
-        session.query(Artifact).filter(Artifact.run_id == run_id).delete(synchronize_session=False)
-        session.query(RunItem).filter(RunItem.run_id == run_id).delete(synchronize_session=False)
-        session.delete(run)
-        session.commit()
+        _delete_run_in_storage_and_db(session=session, run=run, settings=settings)
 
     return Response(status_code=204)
+
+
+def _delete_run_in_storage_and_db(*, session, run: Run, settings) -> None:
+    run_id = run.id
+
+    artifacts = session.query(Artifact).filter(Artifact.run_id == run_id).all()
+    for a in artifacts:
+        try:
+            Path(a.path).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    shutil.rmtree(Path(settings.artifact_dir) / run_id, ignore_errors=True)
+
+    session.query(Artifact).filter(Artifact.run_id == run_id).delete(synchronize_session=False)
+    session.query(RunItem).filter(RunItem.run_id == run_id).delete(synchronize_session=False)
+    session.delete(run)
+    session.commit()
+
+
+@router.post("/runs/bulk-delete", response_model=RunBulkDeleteResponse)
+def bulk_delete_runs(request: Request, payload: RunBulkDeleteRequest):
+    SessionLocal = request.app.state.SessionLocal
+    settings = request.app.state.settings
+    results: list[dict] = []
+
+    with SessionLocal() as session:
+        for run_id in payload.run_ids:
+            run = session.get(Run, run_id)
+            if run is None:
+                results.append({"id": run_id, "status": "not_found", "detail": "run not found"})
+                continue
+            if run.status in ("running", "queued"):
+                results.append({"id": run_id, "status": "blocked", "detail": "run is running; cancel before delete"})
+                continue
+
+            try:
+                _delete_run_in_storage_and_db(session=session, run=run, settings=settings)
+                results.append({"id": run_id, "status": "deleted", "detail": None})
+            except Exception as e:
+                session.rollback()
+                results.append({"id": run_id, "status": "error", "detail": str(e)})
+
+    return RunBulkDeleteResponse(results=results)

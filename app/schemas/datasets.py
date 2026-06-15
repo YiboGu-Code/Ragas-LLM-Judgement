@@ -32,3 +32,17 @@ class DatasetListItem(BaseModel):
 
 class DatasetListResponse(BaseModel):
     items: list[DatasetListItem]
+
+
+class DatasetBulkDeleteRequest(BaseModel):
+    dataset_ids: list[str]
+
+
+class BulkDeleteResult(BaseModel):
+    id: str
+    status: str
+    detail: str | None = None
+
+
+class DatasetBulkDeleteResponse(BaseModel):
+    results: list[BulkDeleteResult]

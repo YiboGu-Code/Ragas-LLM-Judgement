@@ -19,7 +19,8 @@ function writeArray(key: string, values: string[]) {
 function uniqRecentInsert(values: string[], id: string, max: number): string[] {
   const normalized = id.trim();
   if (!normalized) return values;
-  const next = [normalized, ...values.filter((x) => x !== normalized)];
+  if (values.includes(normalized)) return values;
+  const next = [normalized, ...values];
   return next.slice(0, max);
 }
 
@@ -41,6 +42,10 @@ export function removeRecentDataset(datasetId: string) {
   writeArray(KEY_DATASETS, next);
 }
 
+export function clearRecentDatasets() {
+  writeArray(KEY_DATASETS, []);
+}
+
 export function getRecentRuns(): string[] {
   return safeParseArray(localStorage.getItem(KEY_RUNS));
 }
@@ -57,4 +62,8 @@ export function removeRecentRun(runId: string) {
   const current = getRecentRuns();
   const next = current.filter((x) => x !== normalized);
   writeArray(KEY_RUNS, next);
+}
+
+export function clearRecentRuns() {
+  writeArray(KEY_RUNS, []);
 }

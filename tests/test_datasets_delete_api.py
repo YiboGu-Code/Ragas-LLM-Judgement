@@ -65,3 +65,46 @@ def test_delete_dataset_404_when_not_found(tmp_path, monkeypatch):
     resp = client.delete("/datasets/not-found")
     assert resp.status_code == 404, resp.text
 
+
+def test_bulk_delete_datasets_returns_per_item_results(tmp_path, monkeypatch):
+    monkeypatch.setenv("APP_SQLITE_PATH", str(tmp_path / "app.db"))
+    monkeypatch.setenv("APP_DATASET_DIR", str(tmp_path / "datasets"))
+
+    app = create_app()
+    client = TestClient(app)
+
+    ds_content = b'{"record_id":"p1","type":"prompt","input":{"user_input":"hi"},"trace":{"output":{"answer":"ok"}}}\n'
+    ds1_resp = client.post("/datasets", files={"file": ("ds1.jsonl", ds_content, "application/jsonl")}, data={"eval_type": "prompt"})
+    assert ds1_resp.status_code == 200, ds1_resp.text
+    ds1_id = ds1_resp.json()["dataset_id"]
+
+    ds2_resp = client.post("/datasets", files={"file": ("ds2.jsonl", ds_content, "application/jsonl")}, data={"eval_type": "prompt"})
+    assert ds2_resp.status_code == 200, ds2_resp.text
+    ds2_id = ds2_resp.json()["dataset_id"]
+
+    run_resp = client.post(
+        "/runs",
+        json={
+            "dataset_id": ds2_id,
+            "eval_type": "prompt",
+            "metrics": [{"metric_name": "ragas_answer_relevancy", "metric_config": {}}],
+            "provider_ref": {"provider_name": "none", "config": {}},
+            "execution": {"max_concurrency": 1, "timeout_seconds": 2, "save_artifacts": False},
+        },
+    )
+    assert run_resp.status_code == 200, run_resp.text
+
+    resp = client.post(
+        "/datasets/bulk-delete",
+        json={"dataset_ids": [ds1_id, ds2_id, "missing-ds"]},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert [x["id"] for x in body["results"]] == [ds1_id, ds2_id, "missing-ds"]
+    by_id = {x["id"]: x for x in body["results"]}
+    assert by_id[ds1_id]["status"] == "deleted"
+    assert by_id[ds2_id]["status"] == "blocked"
+    assert by_id["missing-ds"]["status"] == "not_found"
+
+    assert client.get(f"/datasets/{ds1_id}").status_code == 404
+    assert client.get(f"/datasets/{ds2_id}").status_code == 200

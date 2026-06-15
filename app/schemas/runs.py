@@ -64,3 +64,17 @@ class RunListItem(BaseModel):
 
 class RunListResponse(BaseModel):
     items: list[RunListItem]
+
+
+class RunBulkDeleteRequest(BaseModel):
+    run_ids: list[str]
+
+
+class BulkDeleteResult(BaseModel):
+    id: str
+    status: str
+    detail: str | None = None
+
+
+class RunBulkDeleteResponse(BaseModel):
+    results: list[BulkDeleteResult]

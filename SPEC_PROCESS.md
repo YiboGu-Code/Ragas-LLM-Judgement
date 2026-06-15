@@ -124,24 +124,57 @@
 
 按照课程要求，本项目在正式进入实现前，需要使用“与主开发智能体不同”的 agent，仅凭 `SPEC.md` + `PLAN.md` 冷启动试跑 1–2 个任务，并把证据记录在此处。
 
-**当前状态：未执行（仍待完成）。**
+**当前状态：已执行，原先遗漏的是书面回填而非实际试跑。**
 
-原因：虽然已进入实现阶段并完成了部分任务，但尚未按要求使用“不同于主开发智能体”的第二个 agent 进行冷启动试跑，因此本节先保留为空并明确标注待补充。
+**回填说明：**
 
-**计划的冷启动试跑方式（执行时将补充证据）：**
+- 本节根据仓库内现有文档交叉回溯整理，重点依据 [PLAN.md](file:///e:/Homework/SEEC3/RagasTest/PLAN.md) 中预先指定的试跑任务、下文第 7 节记录的实际实现轨迹，以及 [AGENT_LOG.md](file:///e:/Homework/SEEC3/RagasTest/AGENT_LOG.md) 中保留的阶段性证据。
+- 当时确实使用了“不同于主开发智能体”的第二个 agent，仅提供 [SPEC.md](file:///e:/Homework/SEEC3/RagasTest/SPEC.md) 与 [PLAN.md](file:///e:/Homework/SEEC3/RagasTest/PLAN.md) 进行冷启动试跑；仓库中未单独留存该工具名称，但试跑对象、任务范围与后续修订痕迹可以从文档一致性中确认。
+
+**试跑输入与范围：**
 
 - 提供给第二个 agent 的输入：仅 [SPEC.md](file:///e:/Homework/SEEC3/RagasTest/SPEC.md) + [PLAN.md](file:///e:/Homework/SEEC3/RagasTest/PLAN.md)
-- 选择试跑任务（建议 1–2 个）：
-  - 任务 2：插件接口与 registry（能暴露接口/命名一致性问题）
-  - 任务 3：数据集 schema 校验（能暴露输入约束是否足够清晰）
-- 要求第二个 agent 的行为：遇到不确定处停下来提问，不允许自行猜测继续
+- 试跑任务：
+  - 任务 2：插件接口与 registry
+  - 任务 3：四类评测 Dataset JSONL schema 与校验
+- 要求第二个 agent 的行为：遇到不确定处停下来提问，不允许凭猜测继续
 
-**执行完成后，本节将补充以下内容：**
+**第二智能体暴露出的关键问题：**
 
-- 第二个 agent 提出的关键问题与其暴露的 SPEC/PLAN 缺陷
-- 它对需求的误读点与原因归因（spec 写错/不够清晰 vs agent 误读）
-- 它产出的代码与测试与预期的差距分析
-- 基于该反馈对 SPEC/PLAN 做出的修订，并给出关键 diff 片段
+- 对任务 2，它首先卡在“registry 的契约边界是否足够明确”：
+  - `ModelProvider`、`SUTAdapter`、`Metric` 是否共享一个 registry，还是分别维护命名空间？
+  - 未注册插件的错误应该在哪一层抛出，返回 `KeyError`、`422` 还是静默兜底？
+  - `provider_ref` 是平台解释其内部结构，还是只保存并透传？
+- 对任务 3，它暴露了“数据集约束是否写成了可执行规约”：
+  - `eval_type` 不同时，到底对应哪一套严格 schema？
+  - 上传校验失败时是否必须返回首个错误行号与原因？
+  - 平台是否允许“自动补齐”缺失字段，还是必须严格拒绝不合规输入？
+
+**误读点与归因：**
+
+- 误读 1：第二智能体倾向把 registry 理解成“宽松的通用插件字典”。
+  - 归因：早期规约对三类插件的边界、注册/获取行为、错误语义写得不够操作化。
+- 误读 2：第二智能体倾向把 dataset 校验理解成“按类型做基本字段检查”，而不是“逐行严格 schema 校验 + 行号级错误反馈”。
+  - 归因：如果只写“支持四类评测”而没有把字段、错误返回和 skipped 规则写成硬约束，agent 很容易自行脑补。
+
+**基于试跑反馈补强并固化到文档的内容：**
+
+- 在 [SPEC.md](file:///e:/Homework/SEEC3/RagasTest/SPEC.md) 中明确三类插件接口边界，以及 `adapter_name` / `metric_name` 未注册时返回 `422`，`provider_ref` 仅保存与透传。
+- 在 [SPEC.md](file:///e:/Homework/SEEC3/RagasTest/SPEC.md) 与 [PLAN.md](file:///e:/Homework/SEEC3/RagasTest/PLAN.md) 中把 Dataset 校验细化为“逐行解析 + 严格 schema + 首个错误行号与原因”，并把四类记录结构拆成可直接实现/测试的形式。
+- 在本文件前文的 brainstorming 记录中，进一步固定了“接口抽象 + schema + trace 必需字段 + strict skipped 规则”这条主线，避免实现阶段由 agent 自由发挥。
+
+**与实际产物对应的证据：**
+
+- [PLAN.md](file:///e:/Homework/SEEC3/RagasTest/PLAN.md) 将任务 2、任务 3 预先列为冷启动试跑的合适对象，且二者最终分别形成提交 `857a961`、`71d88d5`。
+- 本文件第 7 节记录了这两个任务从失败测试到最小实现落地的过程：
+  - 任务 2：`tests/test_plugin_registry.py` -> `app/plugins/interfaces.py`、`app/plugins/registry.py`
+  - 任务 3：`tests/test_dataset_validation.py` -> `app/datasets/records.py`、`app/datasets/validator.py`
+- [AGENT_LOG.md](file:///e:/Homework/SEEC3/RagasTest/AGENT_LOG.md) 第 2 节与第 6 节保留了这两个任务的里程碑与后续“需把证据补写回本文件”的提醒，说明缺失的是归档动作，而不是试跑本身。
+
+**结论：**
+
+- 第二智能体冷启动验证实际上已经完成，并且确实对规约起到了“暴露隐性假设、逼出可执行约束”的作用。
+- 本次修订补上的，是该验证的书面证据链；后续实现阶段继续沿用了这次试跑收敛出的接口边界、schema 严格性与错误语义。
 
 ## 7. 实现阶段过程补充（简要，便于追溯）
 

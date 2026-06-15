@@ -1,5 +1,6 @@
 import { apiFetch } from "./client";
 import type {
+  BulkDeleteResponse,
   DatasetCreateResponse,
   DatasetGetResponse,
   DatasetListResponse,
@@ -41,4 +42,13 @@ export async function deleteDataset(datasetId: string): Promise<void> {
 
 export async function listDatasets(): Promise<DatasetListResponse> {
   return apiFetch<DatasetListResponse>("/datasets");
+}
+
+export async function bulkDeleteDatasets(
+  datasetIds: string[],
+): Promise<BulkDeleteResponse> {
+  return apiFetch<BulkDeleteResponse>("/datasets/bulk-delete", {
+    method: "POST",
+    body: { dataset_ids: datasetIds },
+  });
 }

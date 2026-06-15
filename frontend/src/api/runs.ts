@@ -1,5 +1,6 @@
 import { apiFetch, apiFetchBlob } from "./client";
 import type {
+  BulkDeleteResponse,
   RunCreateRequest,
   RunCreateResponse,
   RunGetResponse,
@@ -60,4 +61,11 @@ export async function deleteRun(runId: string): Promise<void> {
 
 export async function listRuns(): Promise<RunListResponse> {
   return apiFetch<RunListResponse>("/runs");
+}
+
+export async function bulkDeleteRuns(runIds: string[]): Promise<BulkDeleteResponse> {
+  return apiFetch<BulkDeleteResponse>("/runs/bulk-delete", {
+    method: "POST",
+    body: { run_ids: runIds },
+  });
 }
