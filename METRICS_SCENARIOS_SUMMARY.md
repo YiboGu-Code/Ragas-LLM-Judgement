@@ -19,7 +19,7 @@
   3. 让 LLM 根据 `answer` 反向生成 `N` 个可能对应的问题，记为 $q'_1, q'_2, ..., q'_N$
   4. 对原问题 $q$ 和每个反向问题 $q'_i$ 计算 embedding
 
-- 近似计算公式（Markdown 标准 LaTeX 块，兼容 Typora/VSCode/语雀/GitBook）：
+- 近似计算公式：
 $$
 \text{AnswerRelevancy}(q, a) = \frac{1}{N} \sum_{i=1}^{N} \cos\left(E(q'_i), E(q)\right)
 $$
